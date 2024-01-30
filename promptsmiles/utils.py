@@ -1,14 +1,8 @@
-import io
-import copy
 import re
-import os
-import gzip
-import torch
-import logging
+import copy
 import random
 import warnings
-import numpy as np
-from model.vocabulary import SMILESTokenizer
+
 from rdkit import Chem
 from rdkit.Chem import Descriptors, rdqueries
 import rdkit.Chem.Draw as Draw

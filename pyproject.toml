@@ -2,9 +2,12 @@
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+exclude = ["images*", "tests*"]
+
 [project]
 name = "promptsmiles"
-version = "0.1"
+version = "1.0"
 authors = [
   { name="Morgan Thomas", email="morganthomas263@gmail.com" },
 ]
@@ -18,7 +21,7 @@ requires-python = ">=3.7"
 #    "Operating System :: OS Independent",
 # ]
 dependencies = [
-  "rdkit"
+  "rdkit>=2022" # Let's just take a relatively recent cut-off for RDKit
 ]
 
 # [project.urls]

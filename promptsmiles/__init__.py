@@ -1,1 +1,1 @@
-from promptsmiles import DeNovo, ScaffoldGenerator, FragmentLinker
+from promptsmiles.sample import DeNovo, ScaffoldDecorator, FragmentLinker

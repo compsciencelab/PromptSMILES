@@ -61,7 +61,7 @@ def CLM_sampler(prompt: str, batch_size: int):
     # Encode prompt and sample as per model implementation
     return smiles, nlls
 ```
-**Note**: For a more efficient implementation, prompt should also accept a list of prompts equal to batch_size and later set batch_prompts=True.
+**Note**: For a more efficient implementation, prompt should accept a list of prompts equal to batch_size and `batch_prompts` should be set to `True`.
 
 The second is a function that evaluates the NLL of a list of SMILES
 ```python

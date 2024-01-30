@@ -4,7 +4,7 @@ from copy import deepcopy
 from typing import Callable
 from collections import namedtuple
 
-from . import utils
+from promptsmiles import utils
 
 
 class BaseSampler:
