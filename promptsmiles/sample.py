@@ -89,7 +89,7 @@ class ScaffoldDecorator(BaseSampler):
         return_all : bool, optional
             Whether to return all intermediate samples, by default False
         random_seed : int, optional
-            The random seed to use, by default 123
+            The random seed to use, by default 123, only for the wrapper and not e.g., torch.
         force_first : bool, optional
             Whether to force the first attachment point to be the first prompt, by default False
         
@@ -333,7 +333,7 @@ class FragmentLinker(BaseSampler):
         return_all : bool, optional
             Whether to return all intermediate samples, by default False
         random_seed : int, optional
-            The random seed to use, by default 123
+            The random seed to use, by default 123, only for the wrapper and not e.g., torch.
         
         Returns
         -------
