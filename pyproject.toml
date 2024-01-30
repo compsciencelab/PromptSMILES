@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "promptsmiles"
+version = "0.1"
+authors = [
+  { name="Morgan Thomas", email="morganthomas263@gmail.com" },
+]
+description = "A conveniant package to manipulate SMILES strings for iterative prompting with chemical language models."
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.7"
+# classifiers = [
+#    "Programming Language :: Python :: 3",
+#    "License :: OSI Approved :: MIT License",
+#    "Operating System :: OS Independent",
+# ]
+dependencies = [
+  "rdkit"
+]
+
+# [project.urls]
+# Homepage = "https://github.com/pypa/sampleproject"
+# Issues = "https://github.com/pypa/sampleproject/issues"

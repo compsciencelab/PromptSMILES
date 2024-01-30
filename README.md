@@ -1,1 +1,72 @@
-# PromptSMILES
+# PromptSMILES: Simple scaffold decoration and fragment linking for chemical language models
+
+This library contains code to manipulate SMILES strings to facilitate iterative prompting to be coupled with a trained chemical language model (CLM) that uses SMILES notation.
+
+# Installation
+The libary can be installed via pip
+```
+pip install promptsmiles
+```
+Or via obtaining a copy of this repo, promptsmiles requires RDKit.
+```
+git clone https://github.com/MorganCThomas/PromptSMILES.git
+cd PromptSMILES
+pip install ./
+```
+
+# Use
+PromptSMILES is designed as a wrapper to CLM sampling that can accept a prompt (i.e., an initial string to begin autoregressive token generation). Therefore, it requires two callable functions, described later. PromptSMILES has 3 main classes, DeNovo (a dummy wrapper to make code consistent), ScaffoldDecorator, and FragmentLinker.
+
+## Scaffold Decoration
+```python
+from promptsmiles import ScaffoldDecorator, FragmentLinker
+
+SD = ScaffoldDecorator(
+    scaffold="N1(*)CCN(CC1)CCCCN(*)",
+    batch_size=64,
+    sample_fn=CLM.sampler,
+    evaluate_fn=CLM.evaluater,
+    batch_prompts=False, # CLM.sampler accepts a list of prompts or not
+    shuffle=True, # Randomly select attachment points within a batch or not
+    return_all=False,
+    )
+smiles, nlls = SD.sample(batch_size=3, return_all=True) # Parameters can be overriden here if desired
+```
+
+## Fragment linking / scaffold hopping
+```python
+FL = FragmentLinker(
+    fragments=["N1(*)CCNCC1", "C1CC1(*)"],
+    batch_size=64,
+    sample_fn=CLM.sampler,
+    evaluate_fn=CLM.evaluater,
+    batch_prompts=False, 
+    shuffle=True, 
+    scan=False, # Optional when combining 2 fragments, otherwise is set to true
+    return_all=False,
+)
+smiles, nlls = FL.sample(batch_size=3)
+```
+## Required chemical language model functions
+Notice the callable functions required CLM.sampler and CLM.evaluater. The first is a function that samples from the CLM given a prompt.
+
+```python
+def CLM_sampler(prompt: str, batch_size: int):
+    """
+    Input: Must have a prompt and batch_size argument.
+    Output: SMILES (list), NLLs (list | np.array | torch.tensor)
+    """
+    # Encode prompt and sample as per model implementation
+    return smiles, nlls
+```
+**Note**: For a more efficient implementation, prompt should also accept a list of prompts equal to batch_size and later set batch_prompts=True.
+
+The second is a function that evaluates the NLL of a list of SMILES
+```python
+def CLM_evaluater(smiles: list):
+    """
+    Input: A list of SMILES
+    Output: NLLs (list | np.array | torch.tensor)
+    """
+    return nlls
+```
