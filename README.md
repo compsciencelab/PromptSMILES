@@ -32,6 +32,7 @@ SD = ScaffoldDecorator(
     )
 smiles, nlls = SD.sample(batch_size=3, return_all=True) # Parameters can be overriden here if desired
 ```
+![alt text](https://github.com/MorganCThomas/PromptSMILES/blob/main/images/scaff_dec_example.png)
 
 ## Fragment linking / scaffold hopping
 ```python
@@ -47,6 +48,7 @@ FL = FragmentLinker(
 )
 smiles, nlls = FL.sample(batch_size=3)
 ```
+![alt text](https://github.com/MorganCThomas/PromptSMILES/blob/main/images/frag_link_example.png)
 ## Required chemical language model functions
 Notice the callable functions required CLM.sampler and CLM.evaluater. The first is a function that samples from the CLM given a prompt.
 
