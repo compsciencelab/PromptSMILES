@@ -45,7 +45,7 @@ class DeNovo:
         sample_fn : Callable
             The sampling function to use in the following format.
             sample_fn(batch_size: int):
-                return smiles: list, nlls: Union[list, np.array, torch.tensor]
+                return smiles: list, nlls: Union[list, np.array, torch.tensor] (on CPU without gradients)
         """
         self.batch_size = batch_size
         self.sample_fn = sample_fn
@@ -77,11 +77,11 @@ class ScaffoldDecorator(BaseSampler):
         sample_fn : Callable
             The sampling function to use in the following format.
             sample_fn(prompt: Union[str, list], batch_size: int):
-                return smiles: list, nlls: Union[list, np.array, torch.tensor]
+                return smiles: list, nlls: Union[list, np.array, torch.tensor] (on CPU without gradients)
         evaluate_fn : Callable
             The evaluation function to use in the following format.
             evaluate_fn(smiles: Union[str, list]):
-                return nlls: Union[list, np.array, torch.tensor]
+                return nlls: Union[list, np.array, torch.tensor] (on CPU without gradients)
         batch_prompts : bool, optional
             Whether the sample_fn can accept a list of prompts equal to batch_size, by default False
         shuffle : bool, optional
@@ -319,11 +319,11 @@ class FragmentLinker(BaseSampler):
         sample_fn : Callable
             The sampling function to use in the following format.
             sample_fn(prompt: Union[str, list], batch_size: int):
-                return smiles: list, nlls: Union[list, np.array, torch.tensor]
+                return smiles: list, nlls: Union[list, np.array, torch.tensor] (on CPU without gradients)
         evaluate_fn : Callable
             The evaluation function to use in the following format.
             evaluate_fn(smiles: Union[str, list]):
-                return nlls: Union[list, np.array, torch.tensor]
+                return nlls: Union[list, np.array, torch.tensor] (on CPU without gradients)
         batch_prompts : bool, optional
             Whether the sample_fn can accept a list of prompts equal to batch_size, by default False
         shuffle : bool, optional
