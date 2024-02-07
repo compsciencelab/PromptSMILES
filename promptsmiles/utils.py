@@ -54,6 +54,19 @@ class SMILESTokenizer:
                 smi += token
         return smi
 
+def split_by_regex(data: str, regexes: list):
+    if not regexes:
+        return list(data)
+    regexp = regexes[0]
+    splitted = regexp.split(data)
+    tokens = []
+    for i, split in enumerate(splitted):
+        if i % 2 == 0:
+            tokens += split_by_regex(split, regexes[1:])
+        else:
+            tokens.append(split)
+    return tokens
+
 def root_smiles(smi, rootAtom=None, reverse=False):
     """Rearrange SMILES to start at rootAtom"""
     # Convert leading wildcard out of parenthesis if presented that way
@@ -145,8 +158,9 @@ def reverse_smiles(smiles, renumber_rings=True, v=False):
     # REGEX
     square_brackets = re.compile(r"(\[[^\]]*\])")
     brcl = re.compile(r"(Br|Cl)")
-    rings = re.compile(r"([a-zA-Z][0-9]+)")
-    double_rings = re.compile(r"([0-9]{2})")
+    rings = re.compile(r"([a-zA-Z][%0-9]+)")
+    single_rings = re.compile(r"([0-9]{1})")
+    double_rings = re.compile(r"(%[0-9]{2})")
 
     # Find parenthesis indexes
     open_count = 0
@@ -213,7 +227,7 @@ def reverse_smiles(smiles, renumber_rings=True, v=False):
 
     # Split regex outside parenthesis
     pre_split = [re.compile("\)$")] # Ends in brackets
-    for regex in [square_brackets, brcl, rings, double_rings]:
+    for regex in [square_brackets, brcl, rings]:
         new_splitted = []
         for i, t in enumerate(splitted):
             if any([avoid.search(t) for avoid in pre_split]):
@@ -254,36 +268,32 @@ def reverse_smiles(smiles, renumber_rings=True, v=False):
 
     # Re-number the rings in order of appearance
     if renumber_rings:
-        # WARNING: Limited to < 10 rings as treats each number as an individual ring
         ring_map = {}
         ring_count = 1
-        square_brackets = False
-        new_rsmiles = ""
-        for ci, c in enumerate(rsmiles):
-            # First evaluate if we are in square brackets
-            if c == '[':
-                square_brackets = True
-            if c == ']':
-                square_brackets = False
-            if not square_brackets:
-                # Check for number
-                if re.search("[0-9]", c):
-                    # Add to ring map
-                    if c not in ring_map.keys(): #not any([rn == mi for mi, mo in ring_map]):
-                        ring_map[c] = str(ring_count) #.append((rn, str(ring_count)))
-                        ring_count += 1
-                    # Update c
-                    c = ring_map[c]
+        new_rsmiles = []
+
+        def ring_number(x):
+            if x < 10: return str(x)
+            else: return "%"+str(x)
+
+        for c in split_by_regex(rsmiles, [square_brackets, brcl, double_rings, single_rings]):
+            if single_rings.match(c) or double_rings.match(c):
+                # Add new ring to map
+                if c not in ring_map.keys():
+                    ring_map[c] = ring_number(ring_count)
+                    ring_count += 1
+                # Update ring close
+                c = ring_map[c]
             # Add token
-            new_rsmiles += c
-        rsmiles = new_rsmiles
+            new_rsmiles.append(c)
+        rsmiles = "".join(new_rsmiles)
         if v: print(f'Rings reindexed:\n\t {rsmiles}')
  
     return rsmiles
 
 def correct_ring_numbers(smi1, smi2) -> str:
     """Given the rings in smi1, reindex the rings in smi2"""
-    # WARNING: Limited to < 10 rings as treats each number as an individual ring
+    # WARNING: Limited to < 10 rings as treats each number as an individual ring TODO Fix...
 
     # Count rings in smi1
     ring_count = 0
@@ -330,7 +340,7 @@ def get_attachment_indexes(smi: str) -> list: # Utils
     :return: Atom index of attachment points
     """
     tokenizer = SMILESTokenizer()
-    new_token = re.compile(r"([a-zA-Z][0-9]+)")
+    new_token = re.compile(r"([a-zA-Z][0-9]+)") # TODO Extend to ring numbers > 10
     tokenizer.REGEXPS.update({'ring_atom': new_token})
     tokenizer.REGEXP_ORDER.insert(2, 'ring_atom')
     tokens = tokenizer.tokenize(smi, with_begin_and_end=False)
@@ -388,7 +398,7 @@ def insert_attachment_points(smi: str, at_pts: list): # Utils
     """
     # Need to add ring number together with atom for token splitting
     tokenizer = SMILESTokenizer()
-    new_token = re.compile(r"([a-zA-Z][0-9]+)")
+    new_token = re.compile(r"([a-zA-Z][0-9]+)") # TODO Extend to ring numbers > 10
     tokenizer.REGEXPS.update({'ring_atom': new_token})
     tokenizer.REGEXP_ORDER.insert(2, 'ring_atom')
     tokens = tokenizer.tokenize(smi, with_begin_and_end=False)
@@ -450,7 +460,7 @@ def correct_attachment_idx(smi: str, at_idx: int) -> int:
     :return: Actual RDKit index of dummy atom
     """
     tokenizer = SMILESTokenizer()
-    new_token = re.compile(r"([a-zA-Z][0-9]+)")
+    new_token = re.compile(r"([a-zA-Z][0-9]+)") # TODO ring numbers > 10
     tokenizer.REGEXPS.update({'ring_atom': new_token})
     tokenizer.REGEXP_ORDER.insert(2, 'ring_atom')
     tokens = tokenizer.tokenize(smi, with_begin_and_end=False)
