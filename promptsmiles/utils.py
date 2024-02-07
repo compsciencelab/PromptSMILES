@@ -7,6 +7,26 @@ from rdkit import Chem
 from rdkit.Chem import Descriptors, rdqueries
 import rdkit.Chem.Draw as Draw
 
+# TODO Canonicalize to ensure ring atoms have the ring number afterwards (before any branches or )
+
+# REGEX
+SQUARE_BRACKET = re.compile(r"(\[[^\]]*\])")
+BRCL = re.compile(r"(Br|Cl)")
+ATOM = re.compile(r"([a-zA-Z])")
+# ---- RING_ATOM needs some explaining ----
+# An atom followed by ring connections (0-9) or double ring connections (%0-9)
+# The atom may also have an explicit bond to the ring connection -/=/#
+# The atom may also be wrapped in square brackets []
+# The atom should not be *within* square brackets, e.g., "[NH2+]2" is a ring atom but not the "H2" inside it
+RING_ATOM = re.compile(r"([a-zA-Z][%0-9]+(?![^[]*\])|[a-zA-Z][-=#][%0-9]+(?![^[]*\])|\[[^\]]*\][%0-9]+(?![^[]*\])|\[[^\]]*\][-=#][%0-9]+(?![^[]*\]))")
+SINGLE_RING = re.compile(r"([0-9]{1})")
+DOUBLE_RING = re.compile(r"(%[0-9]{2})")
+BR_ATTCH = re.compile(r"(\(\*\))")
+ATTCH = re.compile(r"(\*)")
+BR_OPEN = re.compile(r"(\()")
+BR_CLOSE = re.compile(r"(\))")
+BR = re.compile(r"(\(|\))")
+
 class SMILESTokenizer:
     """Deals with the tokenization and untokenization of SMILES."""
 
@@ -15,14 +35,25 @@ class SMILESTokenizer:
         "brackets": re.compile(r"(\[[^\]]*\])"),
         "2_ring_nums": re.compile(r"(%\d{2})"),
         "brcl": re.compile(r"(Br|Cl)"),
-        "atom": re.compile(r"[a-zA-Z]")
+        "atom": re.compile(r"[a-zA-Z]"),
+        "ring_atom": re.compile(r"([a-zA-Z][%0-9]+(?![^[]*\])|[a-zA-Z][-=#][%0-9]+(?![^[]*\])|\[[^\]]*\][%0-9]+(?![^[]*\])|\[[^\]]*\][-=#][%0-9]+(?![^[]*\]))"),
     }
-    REGEXP_ORDER = ["brackets", "2_ring_nums", "brcl"]
+    REGEXP_ORDER = ["ring_atom", "brackets", "brcl"] #["brackets", "2_ring_nums", "brcl"]
 
     def __init__(self):
         self.GRAMMAR = copy.deepcopy(self.GRAMMAR)
         self.REGEXPS = copy.deepcopy(self.REGEXPS)
         self.REGEXP_ORDER = copy.deepcopy(self.REGEXP_ORDER)
+
+    def _token2atom_map(self, tokens):
+        """Given a list of tokens that tokenizes at least by atom e.g., Br / Cl / [NH2+]"""
+        atom_map = {}
+        atom_counter = 0
+        for i, t in enumerate(tokens):
+            if any([regex.fullmatch(t) for regex in [self.REGEXPS["ring_atom"], self.REGEXPS["brackets"], self.REGEXPS["brcl"], self.REGEXPS["atom"]]]):
+                atom_map[atom_counter] = i
+                atom_counter += 1
+        return atom_map
 
     def tokenize(self, data, with_begin_and_end=True):
         """Tokenizes a SMILES string."""
@@ -67,11 +98,17 @@ def split_by_regex(data: str, regexes: list):
             tokens.append(split)
     return tokens
 
+def int2ring_number(x):
+    if x < 10: 
+        return str(x)
+    else: 
+        return "%"+str(x)
+
 def root_smiles(smi, rootAtom=None, reverse=False):
     """Rearrange SMILES to start at rootAtom"""
     # Convert leading wildcard out of parenthesis if presented that way
     if smi.startswith('(*)'):
-        smi = re.sub('\(\*\)', '*', smi, count=1)
+        smi = re.sub(r'\(\*\)', '*', smi, count=1)
 
     mol = Chem.MolFromSmiles(smi)
     new_smi = None
@@ -94,13 +131,13 @@ def randomize_smiles(smi, n_rand=10, random_type="restricted", rootAtom=None, re
     
     # Convert leading wildcard out of parenthesis if presented that way
     if smi.startswith('(*)'):
-        smi = re.sub('\(\*\)', '*', smi, count=1)
+        smi = re.sub(r'\(\*\)', '*', smi, count=1)
 
     mol = Chem.MolFromSmiles(smi)
     if not mol: return None
-    if Descriptors.RingCount(mol) >= 10:
-        warnings.warn("More than ten rings, uncertain about SMILES reversal behaviour so skipping")
-        return None
+    #if Descriptors.RingCount(mol) >= 10:
+    #    warnings.warn("More than ten rings, uncertain about SMILES reversal behaviour so skipping")
+    #    return None
 
     if random_type == "unrestricted":
         rand_smiles = []
@@ -150,17 +187,12 @@ def randomize_smiles(smi, n_rand=10, random_type="restricted", rootAtom=None, re
 
         return list(set(rand_smiles))
 
-def reverse_smiles(smiles, renumber_rings=True, v=False):
+def _reverse_smiles(smiles, renumber_rings=True, v=False):
     """
     Reverse smiles while maintaining syntax
     """
+    raise DeprecationWarning("This function is deprecated, use reverse_smiles instead")
     if v: print(f'Reversing: {smiles}')
-    # REGEX
-    square_brackets = re.compile(r"(\[[^\]]*\])")
-    brcl = re.compile(r"(Br|Cl)")
-    rings = re.compile(r"([a-zA-Z][%0-9]+)")
-    single_rings = re.compile(r"([0-9]{1})")
-    double_rings = re.compile(r"(%[0-9]{2})")
 
     # Find parenthesis indexes
     open_count = 0
@@ -193,8 +225,8 @@ def reverse_smiles(smiles, renumber_rings=True, v=False):
         elif t == ')':
             close_count += 1
 
-            # Look forward to see if another bracket comes straight after
-            if smiles[i+1] == '(':
+            # Providing it's not the end, look forward to see if another bracket comes straight after
+            if (i < len(smiles)-1) and (smiles[i+1] == '('):
                 continue
 
             if open_count == close_count:
@@ -226,8 +258,8 @@ def reverse_smiles(smiles, renumber_rings=True, v=False):
     if v: print(f'Parenthesis split:\n\t {splitted}')
 
     # Split regex outside parenthesis
-    pre_split = [re.compile("\)$")] # Ends in brackets
-    for regex in [square_brackets, brcl, rings]:
+    pre_split = [re.compile(r"\)$")] # Ends in brackets
+    for regex in [SQUARE_BRACKET, BRCL, RING_ATOM]:
         new_splitted = []
         for i, t in enumerate(splitted):
             if any([avoid.search(t) for avoid in pre_split]):
@@ -252,7 +284,7 @@ def reverse_smiles(smiles, renumber_rings=True, v=False):
     # Add correction for rings following square brackets not picked up
     new_splitted = []
     for i, t in enumerate(splitted):
-        if re.match("[0-9]+", t) and re.match("^\[.*\]$", splitted[i-1]):
+        if re.match(r"[0-9]+", t) and re.match(r"^\[.*\]$", splitted[i-1]):
             new_splitted.pop(-1)
             new_splitted.append(splitted[i-1] + t)
         else:
@@ -268,175 +300,201 @@ def reverse_smiles(smiles, renumber_rings=True, v=False):
 
     # Re-number the rings in order of appearance
     if renumber_rings:
-        ring_map = {}
-        ring_count = 1
-        new_rsmiles = []
-
-        def ring_number(x):
-            if x < 10: return str(x)
-            else: return "%"+str(x)
-
-        for c in split_by_regex(rsmiles, [square_brackets, brcl, double_rings, single_rings]):
-            if single_rings.match(c) or double_rings.match(c):
-                # Add new ring to map
-                if c not in ring_map.keys():
-                    ring_map[c] = ring_number(ring_count)
-                    ring_count += 1
-                # Update ring close
-                c = ring_map[c]
-            # Add token
-            new_rsmiles.append(c)
-        rsmiles = "".join(new_rsmiles)
+        rsmiles = correct_ring_numbers(rsmiles)
         if v: print(f'Rings reindexed:\n\t {rsmiles}')
  
     return rsmiles
 
-def correct_ring_numbers(smi1, smi2) -> str:
-    """Given the rings in smi1, reindex the rings in smi2"""
-    # WARNING: Limited to < 10 rings as treats each number as an individual ring TODO Fix...
+def reverse_smiles(smiles, renumber_rings=True, v=False):
+    """
+    Reverse a SMILES string
+    """
+    if v: print(f'Reversing: {smiles}')
 
+    # Tokenize
+    tokens = split_by_regex(smiles, [RING_ATOM, SQUARE_BRACKET, BRCL, ATTCH, ATOM])
+    if v: print(f'Tokenized:\n\t{tokens}')
+
+    # Find parenthesis
+    branching_idxs = _seek_parenthesis(tokens)
+    if v: print(f'Branches identified:\n\t{branching_idxs}')
+
+    # Merge branches with source atom
+    new_tokens = []
+    i = 0
+    while i < len(tokens):
+        # Check if we need to combine branches into one token
+        if i+1 in branching_idxs:
+            t = "".join(tokens[i:branching_idxs[i+1]+1])
+            new_tokens.append(t)
+            i = branching_idxs[i+1] + 1
+        else:
+            new_tokens.append(tokens[i])
+            i += 1
+    if v: print(f'Tokens corrected by branch:\n\t{new_tokens}')
+
+    # Reverse
+    rev_tokens = list(reversed(new_tokens))
+    rsmiles = "".join(rev_tokens)
+    if v: print(f'Tokens reversed:\n\t{rev_tokens}')
+    if v: print(f'SMILES reversed: {rsmiles}')
+
+    # Re-number rings
+    if renumber_rings:
+        rsmiles = correct_ring_numbers(rsmiles)
+        if v: print(f'Rings reindexed:\n\t {rsmiles}')
+
+    return rsmiles
+
+def correct_ring_numbers(smi: str) -> str:
+    ring_map = {}
+    ring_count = 1
+    new_smiles = []
+    for c in split_by_regex(smi, [SQUARE_BRACKET, BRCL, DOUBLE_RING, SINGLE_RING]):
+        if SINGLE_RING.fullmatch(c) or DOUBLE_RING.fullmatch(c):
+            # Add new ring to map
+            if c not in ring_map.keys():
+                ring_map[c] = int2ring_number(ring_count)
+                ring_count += 1
+            # Update ring close
+            c = ring_map[c]
+        # Add token
+        new_smiles.append(c)
+    smiles = "".join(new_smiles)
+    return smiles
+
+def correct_fragment_ring_numbers(smi1: str, smi2: str) -> str:
+    """Given the rings in smi1, reindex the rings in smi2"""
     # Count rings in smi1
     ring_count = 0
-    square_brackets = False
-    for ci, c in enumerate(smi1):
-        # Ignore numbers in square brackets
-        if c == '[':
-            square_brackets = True
-        if c == ']':
-            square_brackets = False
-        if not square_brackets:
-            # Check for number
-            if re.search("[0-9]", c):
-                # Count max ring index
-                ring_count = max(ring_count, int(c))
+    for c in split_by_regex(smi1, [SQUARE_BRACKET, BRCL, DOUBLE_RING, SINGLE_RING]):
+        # Check for number
+        if SINGLE_RING.fullmatch(c) or DOUBLE_RING.fullmatch(c):
+            # Count max ring index
+            ring_count = max(ring_count, int(c))
     
     # Reindex smi2
     ring_map = {}
-    square_brackets = False
-    new_smi2 = ""
-    for ci, c in enumerate(smi2):
-        # First evaluate if we are in square brackets
-        if c == '[':
-            square_brackets = True
-        if c == ']':
-            square_brackets = False
-        if not square_brackets:
-            # Check for number
-            if re.search("[0-9]", c):
-                # Add to ring map
-                if c not in ring_map.keys(): #not any([rn == mi for mi, mo in ring_map]):
-                    ring_count += 1
-                    ring_map[c] = str(ring_count) #.append((rn, str(ring_count)))
-                # Update c
-                c = ring_map[c]
+    #square_brackets = False
+    new_smi2 = []
+    for c in split_by_regex(smi2, [SQUARE_BRACKET, BRCL, DOUBLE_RING, SINGLE_RING]):
+        # Check for number
+        if SINGLE_RING.fullmatch(c) or DOUBLE_RING.fullmatch(c):
+            # Add new ring to map
+            if c not in ring_map.keys():
+                ring_map[c] = int2ring_number(ring_count)
+                ring_count += 1
+            # Update c
+            c = ring_map[c]
         # Add token
-        new_smi2 += c
-    return new_smi2
+        new_smi2.append(c)
+    return "".join(new_smi2)
 
-def get_attachment_indexes(smi: str) -> list: # Utils
+def _seek_parenthesis(smiles_or_tokens):
     """
-    Identify atom idxs of attachment points (i.e., neighbours of *)
-    :param smi: SMILES with (*) to denote where new atoms should be attached
-    :return: Atom index of attachment points
+    Return the indices of top level parenthesis only as a dict map
     """
-    tokenizer = SMILESTokenizer()
-    new_token = re.compile(r"([a-zA-Z][0-9]+)") # TODO Extend to ring numbers > 10
-    tokenizer.REGEXPS.update({'ring_atom': new_token})
-    tokenizer.REGEXP_ORDER.insert(2, 'ring_atom')
-    tokens = tokenizer.tokenize(smi, with_begin_and_end=False)
-    atom_regexp = [
-        tokenizer.REGEXPS["brackets"],
-        tokenizer.REGEXPS["brcl"],
-        tokenizer.REGEXPS["atom"],
-        tokenizer.REGEXPS["ring_atom"]
-        ]
+    br_open = 0
+    multiple = False
+    open_close_idxs = {} # {idx1: idx2}
+    for i, t in enumerate(smiles_or_tokens):
+        # Open
+        if BR_OPEN.fullmatch(t):
+            # If first open, save index
+            if (br_open == 0) and not multiple:
+                br_open_idx = i  
+            br_open += 1
+            multiple = False
+        # Close
+        if BR_CLOSE.fullmatch(t):
+            br_open -= 1
+            # If last close, save index
+            if br_open == 0:
+                # Check to see we aren't immediately branching afterwards
+                if (i < len(smiles_or_tokens)-1) and BR_OPEN.fullmatch(smiles_or_tokens[i+1]):
+                    multiple = True
+                else:
+                    br_close_idx = i
+                    open_close_idxs[br_open_idx] = br_close_idx
+    return open_close_idxs
+
+def _seek_source_atom(smiles_or_tokens, idx):
+    found = False
+    br_open = 0
+    while not found:
+        idx = idx-1
+        t = smiles_or_tokens[idx]
+        # NOTE opposite because in reverse
+        if BR_CLOSE.fullmatch(t):
+            br_open += 1
+        if BR_OPEN.fullmatch(t):
+            br_open += -1
+        # If there's no branches open and we're not opening another
+        if (br_open == 0) and not BR.fullmatch(t):
+            found = True
+    return idx
+
+def get_attachment_points(smi: str) -> list:
+    tokens = split_by_regex(smi, [RING_ATOM, SQUARE_BRACKET, BRCL, BR_ATTCH, ATTCH, ATOM])
     atom_counter = 0
     attachment_points = []
-    for i, t in enumerate(tokens):
-        if t == '*':
-            # If first atom, attachment point is next atom
-            if i == 0:
-                attachment_points.append(atom_counter+1)
-            elif (i == 1) and (tokens[0] == "("):
-                attachment_points.append(atom_counter+1)
-            elif (i >= 2) and (tokens[i-2] == ')'):
-                # NOTE need to correct for other branches proceeding
-                correction, branch_open, i_rev = 1, 0, 2
-                while tokens[i-i_rev] == ')': # Open brackets
-                    branch_open = 1
-                    i_rev += 1
-                    while branch_open:
-                        if tokens[i-i_rev] == '(':
-                            branch_open -= 1
-                        elif tokens[i-i_rev] == ')':
-                            branch_open += 1
-                        else:
-                            rev_t = tokens[i-i_rev]
-                            if any([regex.match(rev_t) for regex in atom_regexp]):
-                                if tokenizer.REGEXPS["brackets"].match(rev_t): correction += sum([bool(tokenizer.REGEXPS["atom"].match(c)) for c in rev_t])
-                                else: correction += 1
-                        i_rev += 1
-                attachment_points.append(atom_counter-correction)
-                # -----
+    for ti, t in enumerate(tokens):
+        
+        if ATTCH.fullmatch(t) or BR_ATTCH.fullmatch(t):
+            # If it's the first atom
+            if ti == 0:
+                attachment_points.append(atom_counter+1) # Seek next atom...
+            # NOTE correcting for preceeding branches i.e., see previous atom...
+            elif (ti > 0) and BR_CLOSE.fullmatch(tokens[ti-1]):
+                source_ti = _seek_source_atom(tokens, ti)
+                attachment_points.append(source_ti)
+            # Otherwise it's the previous atom
             else:
-                # Otherwise it's the previous atom
                 attachment_points.append(atom_counter-1)
-        if any([regex.match(t) for regex in atom_regexp]):
-            if tokenizer.REGEXPS["brackets"].match(t):
-                # Count multiple atoms in brackets
-                atom_counter += sum([bool(tokenizer.REGEXPS["atom"].match(c)) for c in t])
-            else:
-                atom_counter += 1
+
+        if any([regex.fullmatch(t) for regex in [RING_ATOM, SQUARE_BRACKET, BRCL, ATOM]]):
+            atom_counter += 1
     return attachment_points
 
-def insert_attachment_points(smi: str, at_pts: list): # Utils
-    """
-    Insert (*) to denote where new atoms are to be attached
-    :param smi: SMILES without (*)
-    :param at_pts: Atom index to append attachment points
-    :return: SMILES with (*), atom index of attachment points
-    """
-    # Need to add ring number together with atom for token splitting
-    tokenizer = SMILESTokenizer()
-    new_token = re.compile(r"([a-zA-Z][0-9]+)") # TODO Extend to ring numbers > 10
-    tokenizer.REGEXPS.update({'ring_atom': new_token})
-    tokenizer.REGEXP_ORDER.insert(2, 'ring_atom')
-    tokens = tokenizer.tokenize(smi, with_begin_and_end=False)
-    
-    atom_regexp = [
-        tokenizer.REGEXPS["brackets"],
-        tokenizer.REGEXPS["brcl"],
-        tokenizer.REGEXPS["atom"],
-        tokenizer.REGEXPS["ring_atom"]
-        ]
+def insert_attachment_points(smi: str, at_pts: list):
+    tokens = split_by_regex(smi, [RING_ATOM, SQUARE_BRACKET, BRCL, BR_ATTCH, ATTCH, ATOM])
     atom_counter = 0
     new_tokens = []
     for t in tokens:
         new_tokens.append(t)
-        if any([regex.match(t) for regex in atom_regexp]):
+        if any([regex.fullmatch(t) for regex in [RING_ATOM, SQUARE_BRACKET, BRCL, ATOM]]):
             if atom_counter in at_pts:
                 new_tokens.append("(*)")
-            if tokenizer.REGEXPS["brackets"].match(t):
-                # Count multiple atoms in brackets
-                bracket_atoms = sum([bool(tokenizer.REGEXPS["atom"].match(c)) for c in t])
-                # Check intermediate atom counts for new token
-                for bi in range(bracket_atoms):
-                    if atom_counter in at_pts: new_tokens.append("(*)")
-                    atom_counter += 1
-            else:
-                atom_counter += 1
+            atom_counter += 1
     smi = ''.join(new_tokens)
-    # Inserting these should not change atom numbering
-    #assert at_pts == get_attachment_indexes(smi)
-    return smi, at_pts
+    return smi
 
-def strip_attachment_points(smi: str):  # Utils
+def correct_attachment_point(smi: str, at_pt: int) -> int:
+    """Switch attachment point index to wildcard index in atom"""
+    tokens = split_by_regex(smi, [RING_ATOM, SQUARE_BRACKET, BRCL, BR_ATTCH, ATTCH, ATOM])
+    # If it's the first token it's zero
+    if BR_ATTCH.fullmatch(tokens[0]) or ATTCH.fullmatch(tokens[0]):
+        return 0
+    # Otherwise we need to count corrections
+    atom_counter = 0
+    correction = 1
+    for t in tokens:
+        if at_pt == atom_counter: 
+            break
+        if BR_ATTCH.fullmatch(t) or ATTCH.fullmatch(t):
+            correction += 1
+        if any([regex.fullmatch(t) for regex in [RING_ATOM, SQUARE_BRACKET, BRCL, ATOM]]):
+            atom_counter += 1
+    
+    return at_pt + correction
+
+def strip_attachment_points(smi: str):
     """
     Remove * and provide canonical SMILES
     :param smi: SMILES with (*)
     :return: SMILES without (*), Atom index of attachment points
     """
-    at_pts = get_attachment_indexes(smi)
+    at_pts = get_attachment_points(smi)
     smi = smi.replace("(*)", "").replace("*", "")
     return smi, at_pts
 
@@ -445,85 +503,15 @@ def bracket_attachments(smi):
     Convert all * to ensure they are branching points (*)
     """
     # Replace start
-    nsmi = re.sub("^(\*)([a-zA-Z][0-9]?)", "\\2(\\1)", smi)
+    nsmi = re.sub(r"^(\*)([a-zA-Z][0-9]?)", "\\2(\\1)", smi)
     # Replace end
-    nsmi = re.sub("(\*)$", "(\\1)", nsmi)
+    nsmi = re.sub(r"(\*)$", "(\\1)", nsmi)
     # Replace un-isolated
-    nsmi = re.sub("([^(])(\*)", "\\1(\\2)", nsmi)
-    nsmi = re.sub("(\*)([^)])", "(\\1)\\2", nsmi)
+    nsmi = re.sub(r"([^(])(\*)", "\\1(\\2)", nsmi)
+    nsmi = re.sub(r"(\*)([^)])", "(\\1)\\2", nsmi)
     return nsmi
 
-def correct_attachment_idx(smi: str, at_idx: int) -> int:
-    """
-    Correct the attachment index for rootAtom in RDKit
-    :param smi: Partial smiles with (*) denoting attachment points
-    :return: Actual RDKit index of dummy atom
-    """
-    tokenizer = SMILESTokenizer()
-    new_token = re.compile(r"([a-zA-Z][0-9]+)") # TODO ring numbers > 10
-    tokenizer.REGEXPS.update({'ring_atom': new_token})
-    tokenizer.REGEXP_ORDER.insert(2, 'ring_atom')
-    tokens = tokenizer.tokenize(smi, with_begin_and_end=False)
-    atom_regexp = [
-        tokenizer.REGEXPS["brackets"],
-        tokenizer.REGEXPS["brcl"],
-        tokenizer.REGEXPS["atom"],
-        tokenizer.REGEXPS["ring_atom"]
-        ]
-    atom_counter = 0
-    correction = 1
-    for t in tokens:
-        if atom_counter == at_idx:
-            if atom_counter == 0:
-                correction = 0
-            break
-        if t == '*':
-            correction += 1
-        if any([regex.match(t) for regex in atom_regexp]):
-            if 'H' in t:
-                correction += -1 # Explicitly not counting H's in [] here
-            atom_counter += 1
-    return at_idx + correction
-
-def test_smiles_eq(smi1, smi2):
-    mol1 = Chem.MolFromSmiles(smi1)
-    mol2 = Chem.MolFromSmiles(smi2)
-    # Parse them
-    if not mol1:
-        return False, f'Parsing error: {smi1}'
-    if not mol2:
-        return False, f'Parsing error: {smi2}'
-    # Remove atom map
-    for mol in [mol1, mol2]:
-        for atom in mol.GetAtoms():
-            atom.SetAtomMapNum(0)
-    # Check smiles are the same
-    nsmi1 = Chem.MolToSmiles(mol1)
-    nsmi2 = Chem.MolToSmiles(mol2)
-    if nsmi1 != nsmi2:
-        return False, f'Inequivalent SMILES: {nsmi1} vs {nsmi2}'
-    # Check InChi
-    inchi1 = Chem.MolToInchi(mol1)
-    inchi2 = Chem.MolToInchi(mol2)
-    if inchi1 != inchi2:
-        return False, f'Inequivalent InChi\'s'
-    return True, ""
-
-def test_mol_eq(mol1, mol2):
-    mols = []
-    # Remove atom map
-    for mol in [mol1, mol2]:
-        if isinstance(mol, str):
-            mol = Chem.MolFromSmiles(mol)
-        for atom in mol.GetAtoms():
-            atom.SetAtomMapNum(0)
-        mols.append(mol)
-    # Check InChi
-    inchi1 = Chem.MolToInchi(mols[0])
-    inchi2 = Chem.MolToInchi(mols[1])
-    if inchi1 != inchi2:
-        return False, f'Inequivalent InChi\'s'
-    return True, ""
+# ----- Useful functions for fragment linking specifically -----
 
 def extract_linker(smiles, fragments=[], return_all=False):
     mol = Chem.MolFromSmiles(smiles)
@@ -588,26 +576,7 @@ def extract_linker(smiles, fragments=[], return_all=False):
 
     return linker
 
-def atom2seq_atommap(seq, vocabulary):
-    """Map atom indexes to index in an encoded sequence"""
-    # Tokenize SMILES
-    tokens = vocabulary.decode(seq.data.cpu().numpy())
-    # Map any atom token to an idx
-    tokenizer = SMILESTokenizer()
-    atom_regexp = [
-        tokenizer.REGEXPS["brackets"],
-        tokenizer.REGEXPS["brcl"],
-        tokenizer.REGEXPS["atom"],
-        ]
-    atom_counter = 0
-    atom_map = {}
-    for ti, t in enumerate(tokens):
-        if any([regex.match(t) for regex in atom_regexp]):
-            atom_map[atom_counter] = ti 
-            atom_counter += 1
-    return atom_map
-
-def smiles2smarts(smiles):
+def _smiles2smarts(smiles):
     """Convert a SMILES sequence to a more specific SMARTS query including degree, aromaticity and ring membership"""
     smiles = smiles.replace("(*)", "*")
     mol = Chem.MolFromSmiles(smiles)
@@ -628,14 +597,61 @@ def smiles2smarts(smiles):
     smarts = smarts.replace("[#0]", "[*]")
     return smarts
 
-def find_existing_fragment(smiles, frag_smiles):
+def detect_existing_fragment(smiles, frag_smiles):
     """Get substructure match for frag smiles (with attachment index first)"""
     frag_indexes = []
     mol = Chem.MolFromSmiles(smiles)
-    assert frag_smiles.startswith("(*)"), "Fragment must start with attachment point (*)"
-    frag_smarts = smiles2smarts(frag_smiles)
+    # Fragment must start with attachment point
+    if not frag_smiles.startswith("(*)"):
+        frag_smiles = "(*)" + frag_smiles
+    frag_smarts = _smiles2smarts(frag_smiles)
     frag_patt = Chem.MolFromSmarts(frag_smarts)
     if mol:
         if mol.HasSubstructMatch(frag_patt):
             frag_indexes = list(mol.GetSubstructMatches(frag_patt))
+    # NOTE that now we ignore the first atom i.e., the attachment point
+    if frag_indexes:
+        frag_indexes = [list(match)[1:] for match in frag_indexes]
     return frag_indexes
+
+# ----- Useful functions for testing -----
+
+def smiles_eq(smi1, smi2):
+    mol1 = Chem.MolFromSmiles(smi1)
+    mol2 = Chem.MolFromSmiles(smi2)
+    # Parse them
+    if not mol1:
+        return False, f'Parsing error: {smi1}'
+    if not mol2:
+        return False, f'Parsing error: {smi2}'
+    # Remove atom map
+    for mol in [mol1, mol2]:
+        for atom in mol.GetAtoms():
+            atom.SetAtomMapNum(0)
+    # Check smiles are the same
+    nsmi1 = Chem.MolToSmiles(mol1)
+    nsmi2 = Chem.MolToSmiles(mol2)
+    if nsmi1 != nsmi2:
+        return False, f'Inequivalent SMILES: {nsmi1} vs {nsmi2}'
+    # Check InChi
+    inchi1 = Chem.MolToInchi(mol1)
+    inchi2 = Chem.MolToInchi(mol2)
+    if inchi1 != inchi2:
+        return False, f'Inequivalent InChi\'s'
+    return True, ""
+
+def mol_eq(mol1, mol2):
+    mols = []
+    # Remove atom map
+    for mol in [mol1, mol2]:
+        if isinstance(mol, str):
+            mol = Chem.MolFromSmiles(mol)
+        for atom in mol.GetAtoms():
+            atom.SetAtomMapNum(0)
+        mols.append(mol)
+    # Check InChi
+    inchi1 = Chem.MolToInchi(mols[0])
+    inchi2 = Chem.MolToInchi(mols[1])
+    if inchi1 != inchi2:
+        return False, f'Inequivalent InChi\'s'
+    return True, ""

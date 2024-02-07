@@ -15,8 +15,8 @@ class BaseSampler:
 
     def optimize_prompt(self, smiles: str, at_idx: int, reverse: bool, n_rand: int = 10, **kwargs):
         # ---- Randomize ----
-        # NOTE need to correct attachment index from of attachment point to index of "*"
-        at_idx = utils.correct_attachment_idx(smiles, at_idx)
+        # NOTE need to correct index from attachment point to "*"
+        at_idx = utils.correct_attachment_point(smiles, at_idx)
         rand_smi = utils.randomize_smiles(smiles, n_rand=n_rand, random_type='restricted', rootAtom=at_idx, reverse=reverse)
         if rand_smi is None:
             warnings.warn(f"SMILES randomization failed for {smiles}, rearranging instead...")
@@ -112,7 +112,7 @@ class ScaffoldDecorator(BaseSampler):
         random.seed(self.seed)
 
         # Prepare scaffold SMILES
-        self.at_pts = utils.get_attachment_indexes(self.scaffold)
+        self.at_pts = utils.get_attachment_points(self.scaffold)
         self.n_pts = len(self.at_pts)
         self.variants = []
         # Optionally force initial configuration as the first prompt
@@ -174,7 +174,7 @@ class ScaffoldDecorator(BaseSampler):
 
             if n_rem:
                 # Insert remaining attachment points
-                smi_w_at, _ = utils.insert_attachment_points(smiles, variant.at_pts)
+                smi_w_at = utils.insert_attachment_points(smiles, variant.at_pts)
                 # Select another
                 if shuffle: i = random.randint(0, n_rem-1)
                 else: i = 0
@@ -240,7 +240,7 @@ class ScaffoldDecorator(BaseSampler):
                 new_variants = []
                 for smi, variant in zip(smiles, batch_variants):
                     # Insert remaining attachment points
-                    smi_w_at, _ = utils.insert_attachment_points(smi, variant.at_pts)
+                    smi_w_at = utils.insert_attachment_points(smi, variant.at_pts)
                     # Select another
                     if shuffle: i = random.randint(0, n_rem-1)
                     else: i = 0
@@ -306,7 +306,9 @@ class ScaffoldDecorator(BaseSampler):
 
 
 class FragmentLinker(BaseSampler):
-    def __init__(self, fragments: list, batch_size: int, sample_fn: Callable, evaluate_fn: Callable, batch_prompts: bool = False, shuffle=True, scan=False, return_all: bool = False, random_seed = 123):
+    def __init__(
+        self, fragments: list, batch_size: int, sample_fn: Callable, evaluate_fn: Callable, batch_prompts: bool = False, shuffle: bool = True, scan: bool = False,
+        detect_existing: bool = True, return_all: bool = False, random_seed = 123):
         """
         A Fragment linker class to combine different fragments together via iterative prompting.
 
@@ -345,6 +347,7 @@ class FragmentLinker(BaseSampler):
         self.batch_prompts = batch_prompts
         self.shuffle = shuffle
         self.scan = scan
+        self.detect_existing = detect_existing
         self.sample_fn = sample_fn
         self.evaluate_fn = evaluate_fn
         self.return_all = return_all
@@ -362,7 +365,7 @@ class FragmentLinker(BaseSampler):
         self.fragments = []
         for frag in fragments:
             # Get attachment index
-            aidx = utils.get_attachment_indexes(frag)
+            aidx = utils.get_attachment_points(frag)
             assert len(aidx) == 1, f"Fragment {frag} should only have one attachment point"
             # Optimize forward direction
             for_smi, for_nll = self.optimize_prompt(frag, aidx[0], reverse=False)
@@ -379,10 +382,11 @@ class FragmentLinker(BaseSampler):
             )
         self.fragments.sort(key=lambda x: x.for_nll)
 
-    def _single_sample(self, shuffle: bool = None, scan: bool = None, return_all: bool = None):
+    def _single_sample(self, shuffle: bool = None, scan: bool = None, detect_existing: bool = None, return_all: bool = None):
         # Set parameters
         if not shuffle: shuffle = self.shuffle
         if not scan: scan = self.scan
+        if not detect_existing: detect_existing = self.detect_existing
         if not return_all: return_all = self.return_all
         fragments = deepcopy(self.fragments)
 
@@ -400,7 +404,7 @@ class FragmentLinker(BaseSampler):
         frag_indexes = list(range(len(prompt_tokens)))
         smiles, nll = self.sample_fn(prompt=prompt, batch_size=1)
         smiles, nll = smiles[0], nll[0]
-        smiles_tokens = self.tokenizer.tokenize(smiles, with_begin_and_end=False)
+        smiles_tokens = self.tokenizer.tokenize(smiles, with_begin_and_end=False) # TODO tokenize by ring atom too?
         batch_smiles.append(smiles)
         batch_nlls.append(nll)
         n_rem -= 1
@@ -411,8 +415,26 @@ class FragmentLinker(BaseSampler):
                 if shuffle: i = random.randint(0, n_rem-1)
                 else: i = 0
                 fi = fragments.pop(i)
+                # Detect existing fragments
+                if detect_existing:
+                    exists = False
+                    existing_atoms = utils.detect_existing_fragment(smiles, fi.for_smiles)
+                    # Get an atom map between atoms and tokens
+                    atom_map = self.tokenizer._token2atom_map(smiles_tokens)
+                    # Check it's not generated linker
+                    for match in existing_atoms:
+                        if not any([atom_map[aidx] in frag_indexes for aidx in match]):
+                            # If so, insert fragment indexes, append etc.
+                            frag_indexes.extend([atom_map[aidx] for aidx in match])
+                            batch_smiles.append(smiles)
+                            batch_nlls.append(nll)
+                            n_rem -= 1
+                            exists = True
+                            break
+                    if exists:
+                        continue
                 # Correct rings
-                fi_smi = utils.correct_ring_numbers(smiles, fi.for_smiles)
+                fi_smi = utils.correct_fragment_ring_numbers(smiles, fi.for_smiles)
                 # Insert fragment at different positions
                 temp_smiles = []
                 for i in range(max(frag_indexes), len(smiles_tokens)):
@@ -421,7 +443,7 @@ class FragmentLinker(BaseSampler):
                     if i == len(smiles_tokens)-1: 
                         tsmi = smiles + "(" + fi_smi + ")"
                     else: 
-                        # NOTE operate in token space to minimize errors
+                        # NOTE operate in token space to reduce errors
                         tsmi = "".join(smiles_tokens[:i+1] + ["("] + [fi_smi] + [")"] + smiles_tokens[i+1:])
                     tidx = list(range(i+1, i+len(fi_smi)+2))
                     temp_smiles.append((tsmi, tidx))
@@ -434,27 +456,44 @@ class FragmentLinker(BaseSampler):
                 n_rem -= 1
         else:
             fi = fragments.pop(0)
-            # Correct rings
-            fi_smi = utils.correct_ring_numbers(smiles, fi.for_smiles)
-            # Append fragment
-            smiles = smiles + fi_smi
-            # Evaluate
-            nll = self.evaluate_fn([smiles])[0]
-            batch_smiles.append(smiles)
-            batch_nlls.append(nll)
-            n_rem -= 1
+            # Detect existing fragments
+            exists = False
+            if detect_existing:
+                existing_atoms = utils.detect_existing_fragment(smiles, fi.for_smiles)
+                # Get an atom map between atoms and tokens
+                atom_map = self.tokenizer._token2atom_map(smiles_tokens)
+                for match in existing_atoms:
+                    # Check it's not generated linker
+                    if (not any([atom_map[aidx] in frag_indexes for aidx in match])):
+                        # If so, insert fragment indexes, append etc.
+                        batch_smiles.append(smiles)
+                        batch_nlls.append(nll)
+                        n_rem -= 1
+                        exists = True
+                        break
+            if not exists:
+                # Correct rings
+                fi_smi = utils.correct_fragment_ring_numbers(smiles, fi.for_smiles)
+                # Append fragment
+                smiles = smiles + fi_smi
+                # Evaluate
+                nll = self.evaluate_fn([smiles])[0]
+                batch_smiles.append(smiles)
+                batch_nlls.append(nll)
+                n_rem -= 1
 
         if return_all:
             return batch_smiles, batch_nlls
         else:
             return batch_smiles[-1], batch_nlls[-1]
 
-    def _batch_sample(self, batch_size: int = None, shuffle: bool = None, scan: bool = None, return_all: bool = None):
+    def _batch_sample(self, batch_size: int = None, shuffle: bool = None, scan: bool = None, detect_existing: bool = None, return_all: bool = None):
         """More efficient sampling assuming the sample_fn can accept a batch of prompts"""
         # Set parameters
         if not batch_size: batch_size = self.batch_size
         if not shuffle: shuffle = self.shuffle
         if not scan: scan = self.scan
+        if not detect_existing: detect_existing = self.detect_existing
         if not return_all: return_all = self.return_all
         batch_fragments = [deepcopy(self.fragments) for _ in range(batch_size)] # NOTE repeating with itertools or by *x leads to abberant behaviour with pop removing element from all sublists
 
@@ -483,13 +522,31 @@ class FragmentLinker(BaseSampler):
                 n_smiles = []
                 n_nlls = []
                 n_idxs = []
-                for bi, (smiles, fragments, existing_indexes) in enumerate(zip(batch_smiles[-1], batch_fragments, frag_indexes)):
+                for bi, (smiles, nll, fragments, existing_indexes) in enumerate(zip(batch_smiles[-1], batch_nlls[-1], batch_fragments, frag_indexes)):
                     # Select another fragment
                     if shuffle: i = random.randint(0, n_rem-1)
                     else: i = 0
                     fi = fragments.pop(i)
+                    # Detect existing fragments
+                    if detect_existing:
+                        exists = False
+                        smiles_tokens = self.tokenizer.tokenize(smiles, with_begin_and_end=False)
+                        existing_atoms = utils.detect_existing_fragment(smiles, fi.for_smiles)
+                        # Get an atom map between atoms and tokens
+                        atom_map = self.tokenizer._token2atom_map(smiles_tokens)
+                        # Check it's not generated linker
+                        for match in existing_atoms:
+                            if not any([atom_map[aidx] in frag_indexes for aidx in match]):
+                                # If so, insert fragment indexes, append etc.
+                                frag_indexes[bi].extend([atom_map[aidx] for aidx in match])
+                                n_smiles.append(smiles)
+                                n_nlls.append(nll)
+                                exists = True
+                                break
+                        if exists:
+                            continue
                     # Correct rings
-                    fi_smi = utils.correct_ring_numbers(smiles, fi.for_smiles)
+                    fi_smi = utils.correct_fragment_ring_numbers(smiles, fi.for_smiles)
                     # Insert fragment at different positions
                     smiles_tokens = self.tokenizer.tokenize(smiles, with_begin_and_end=False)
                     temp_smiles = []
@@ -516,11 +573,26 @@ class FragmentLinker(BaseSampler):
             concat_smiles = []
             for smiles, fragments in zip(batch_smiles[0], batch_fragments):
                 fi = fragments.pop(0)
-                # Correct rings
-                fi_smi = utils.correct_ring_numbers(smiles, fi.for_smiles)
-                # Append fragment
-                smiles = smiles + fi_smi
-                concat_smiles.append(smiles)
+                # Detect existing fragments
+                exists = False
+                if detect_existing:
+                    smiles_tokens = self.tokenizer.tokenize(smiles, with_begin_and_end=False)
+                    existing_atoms = utils.detect_existing_fragment(smiles, fi.for_smiles)
+                    # Get an atom map between atoms and tokens
+                    atom_map = self.tokenizer._token2atom_map(smiles_tokens)
+                    for match in existing_atoms:
+                        # Check it's not generated linker
+                        if (not any([atom_map[aidx] in frag_indexes for aidx in match])):
+                            # If so, insert fragment indexes, append etc.
+                            concat_smiles.append(smiles)
+                            exists = True
+                            break
+                if not exists:
+                    # Correct rings
+                    fi_smi = utils.correct_fragment_ring_numbers(smiles, fi.for_smiles)
+                    # Append fragment
+                    smiles = smiles + fi_smi
+                    concat_smiles.append(smiles)
             # Evaluate
             batch_smiles.append(concat_smiles)
             batch_nlls.append(self.evaluate_fn(concat_smiles))
