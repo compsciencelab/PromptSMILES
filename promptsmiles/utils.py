@@ -1,7 +1,12 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the Apache 2.0 License.
+# (See accompanying file README.md file or copy at https://opensource.org/license/apache-2-0/)
+
 import re
 import copy
 import random
-import warnings
+import logging
+logger = logging.getLogger("promptsmiles")
 
 from rdkit import Chem
 from rdkit.Chem import Descriptors, rdqueries
@@ -18,7 +23,8 @@ ATOM = re.compile(r"([a-zA-Z])")
 # The atom may also have an explicit bond to the ring connection -/=/#
 # The atom may also be wrapped in square brackets []
 # The atom should not be *within* square brackets, e.g., "[NH2+]2" is a ring atom but not the "H2" inside it
-RING_ATOM = re.compile(r"([a-zA-Z][%0-9]+(?![^[]*\])|[a-zA-Z][-=#][%0-9]+(?![^[]*\])|\[[^\]]*\][%0-9]+(?![^[]*\])|\[[^\]]*\][-=#][%0-9]+(?![^[]*\]))")
+RING_ATOM = re.compile(r"([a-zA-Z][%0-9]+(?![^[]*\])|[a-zA-Z][-=#:][%0-9]+(?![^[]*\])|\[[^\]]*\][%0-9]+(?![^[]*\])|\[[^\]]*\][-=#:][%0-9]+(?![^[]*\]))")
+#RING_ATOM = re.compile(r"([a-zA-Z][%0-9][-=#][%0-9]+(?![^[]*\])|[a-zA-Z][%0-9]+(?![^[]*\])|[a-zA-Z][-=#][%0-9]+(?![^[]*\])|\[[^\]]*\][%0-9][-=#][%0-9]+(?![^[]*\])|\[[^\]]*\][%0-9]+(?![^[]*\])|\[[^\]]*\][-=#][%0-9]+(?![^[]*\]))")
 SINGLE_RING = re.compile(r"([0-9]{1})")
 DOUBLE_RING = re.compile(r"(%[0-9]{2})")
 BR_ATTCH = re.compile(r"(\(\*\))")
@@ -162,148 +168,39 @@ def randomize_smiles(smi, n_rand=10, random_type="restricted", rootAtom=None, re
 
     if random_type == "restricted":
         rand_smiles = []
-        for i in range(n_rand):
+        i = 0
+        attempts = 0
+        while (i < n_rand) and (attempts < 50):
+            attempts += 1
             if rootAtom is not None:
                 new_atom_order = list(range(mol.GetNumAtoms()))
                 root_atom = new_atom_order.pop(rootAtom) # -1
                 random.shuffle(new_atom_order)
                 new_atom_order = [root_atom] + new_atom_order
                 random_mol = Chem.RenumberAtoms(mol, newOrder=new_atom_order)
-                random_smiles = Chem.MolToSmiles(random_mol, canonical=False, isomericSmiles=False)
+                random_smiles = Chem.MolToSmiles(random_mol, canonical=False, isomericSmiles=True)
             else:
                 new_atom_order = list(range(mol.GetNumAtoms()))
                 random.shuffle(new_atom_order)
                 random_mol = Chem.RenumberAtoms(mol, newOrder=new_atom_order)
-                random_smiles = Chem.MolToSmiles(random_mol, canonical=False, isomericSmiles=False)
+                random_smiles = Chem.MolToSmiles(random_mol, canonical=False, isomericSmiles=True)
 
             if reverse:
-                # TODO sometimes RDKit assigns the same ring index to different rings, causing an error upon reversing
-                random_smiles = reverse_smiles(random_smiles)
+                rev_random_smiles = reverse_smiles(random_smiles)
+                # NOTE sometimes RDKit assigns the same ring index to different rings, causing an error upon reversing, so let's try again in this case
+                if smiles_eq(random_smiles, rev_random_smiles)[0]:
+                    random_smiles = rev_random_smiles
+                else:
+                    # Keep trying until we find one without RDKit reusing ring indexes
+                    continue
 
             # Convert back to (*)
             random_smiles = bracket_attachments(random_smiles)
                 
             rand_smiles.append(random_smiles)
+            i += 1
 
         return list(set(rand_smiles))
-
-def _reverse_smiles(smiles, renumber_rings=True, v=False):
-    """
-    Reverse smiles while maintaining syntax
-    """
-    raise DeprecationWarning("This function is deprecated, use reverse_smiles instead")
-    if v: print(f'Reversing: {smiles}')
-
-    # Find parenthesis indexes
-    open_count = 0
-    close_count = 0
-    open_close_idxs = []
-    for i, t in enumerate(smiles):
-        # Open
-        if (t == '(') and (open_count == 0):
-            # Grab branch source
-            find_source = True
-            sbracket = False
-            count_back = 1
-            while find_source:
-                if re.match("[a-zA-Z]", smiles[i-count_back]):
-                    while sbracket: 
-                        if smiles[i-count_back] == '[':
-                            sbracket = False
-                        else:
-                            count_back += 1
-                    open_close_idxs.append(i-count_back)
-                    find_source = False
-                else:
-                    if smiles[i-count_back] == ']': sbracket = True # Correct for square bracket preceeding parenthesis
-                    count_back += 1
-            open_count += 1
-        elif t == '(':
-            open_count += 1
-
-        # Close
-        elif t == ')':
-            close_count += 1
-
-            # Providing it's not the end, look forward to see if another bracket comes straight after
-            if (i < len(smiles)-1) and (smiles[i+1] == '('):
-                continue
-
-            if open_count == close_count:
-                open_close_idxs.append(i)
-                open_count = 0
-                close_count = 0
-        else:
-            pass
-    if v: print(f'Parenthesis identified:\n\t {open_close_idxs}')
-
-    # Split by parenthesis indexes
-    splitted = []
-    for i in range(0, len(open_close_idxs), 2):
-        # Add before bracket bit
-        if i == 0:
-            splitted.append(smiles[:open_close_idxs[i]])
-        else:
-            splitted.append(smiles[open_close_idxs[i-1]+1: open_close_idxs[i]])
-        # Add bracket
-        splitted.append(smiles[open_close_idxs[i]:open_close_idxs[i+1]+1])
-    # Add bit after
-    if len(open_close_idxs) > 0:
-        splitted.append(smiles[open_close_idxs[-1]+1:])
-    # When we have no brackets
-    else:
-        splitted.append(smiles)
-    # Remove blanks
-    splitted = [s for s in splitted if s != '']
-    if v: print(f'Parenthesis split:\n\t {splitted}')
-
-    # Split regex outside parenthesis
-    pre_split = [re.compile(r"\)$")] # Ends in brackets
-    for regex in [SQUARE_BRACKET, BRCL, RING_ATOM]:
-        new_splitted = []
-        for i, t in enumerate(splitted):
-            if any([avoid.search(t) for avoid in pre_split]):
-                new_splitted.extend([t])
-            else:
-                new_split = [s for s in regex.split(t) if s != '']
-                new_splitted.extend(new_split)
-        splitted = new_splitted
-        pre_split.append(regex)
-    if v: print(f'Tokenize outside:\n\t {splitted}')
-
-    # Now we split everything else
-    new_splitted = []
-    for i, t in enumerate(splitted):
-        if any([avoid.search(t) for avoid in pre_split]):
-            new_splitted.extend([t])
-        else:
-            new_splitted.extend(list(t))
-    splitted = new_splitted
-    if v: print(f'Tokenize anything else:\n\t {splitted}')
-
-    # Add correction for rings following square brackets not picked up
-    new_splitted = []
-    for i, t in enumerate(splitted):
-        if re.match(r"[0-9]+", t) and re.match(r"^\[.*\]$", splitted[i-1]):
-            new_splitted.pop(-1)
-            new_splitted.append(splitted[i-1] + t)
-        else:
-            new_splitted.append(t)
-    splitted = new_splitted
-    if v: print(f'Correct rings following square brackets:\n\t {splitted}')
-
-    # Reverse the tokens
-    rsplitted = list(reversed(splitted))
-    rsmiles = "".join(rsplitted)
-    if v: print(f'Reversed tokens:\n\t {rsplitted}')
-    if v: print(f'Reversed smiles:\n\t {rsmiles}')
-
-    # Re-number the rings in order of appearance
-    if renumber_rings:
-        rsmiles = correct_ring_numbers(rsmiles)
-        if v: print(f'Rings reindexed:\n\t {rsmiles}')
- 
-    return rsmiles
 
 def reverse_smiles(smiles, renumber_rings=True, v=False):
     """
@@ -341,12 +238,13 @@ def reverse_smiles(smiles, renumber_rings=True, v=False):
 
     # Re-number rings
     if renumber_rings:
-        rsmiles = correct_ring_numbers(rsmiles)
+        rsmiles = _reverse_ring_numbers(rsmiles)
         if v: print(f'Rings reindexed:\n\t {rsmiles}')
 
     return rsmiles
 
-def correct_ring_numbers(smi: str) -> str:
+def _reverse_ring_numbers(smi: str) -> str:
+    """Given ring numbers in smi, reindex the rings in smi from left to right"""
     ring_map = {}
     ring_count = 1
     new_smiles = []
@@ -362,6 +260,65 @@ def correct_ring_numbers(smi: str) -> str:
         new_smiles.append(c)
     smiles = "".join(new_smiles)
     return smiles
+
+def _check_ring_numbers(smiles, debug=False):
+    """Check there aren't more rings than labelled, if there are, correct ring labelling"""
+    mol = Chem.MolFromSmiles(smiles)
+    ringinfo = mol.GetRingInfo()
+    N_rings = ringinfo.NumRings()
+    L_rings = [int(t.strip("%")) for t in DOUBLE_RING.findall(smiles) + SINGLE_RING.findall(smiles)]
+    if L_rings:
+        L_rings = max(L_rings)
+
+    # ---- Check rings
+    if (not L_rings) or (L_rings == N_rings):
+        # Assume they're labelled correctly
+        return smiles
+    
+    # ---- Otherwise let's re-index
+    rings = ringinfo.AtomRings()
+    tokens = split_by_regex(smiles, [RING_ATOM, SQUARE_BRACKET, BRCL, ATOM])
+
+    def before_and_after(element, elements):
+        idx = elements.index(element)
+        before = elements[idx-1] # if 0 then -1
+        if idx + 1 == len(elements): after = elements[0]
+        else: after = elements[idx+1]
+        return [before, after]
+    
+    atom_count = 0
+    ring_count = 1
+    ring_map = {} # Map ring index to ring label in SMILES
+    ring_open = {} # Map ring index to opening atom
+    new_tokens = []
+    for t in tokens:
+        if any([regex.fullmatch(t) for regex in [RING_ATOM, SQUARE_BRACKET, BRCL, ATOM, BR_ATTCH, ATTCH]]):
+            if RING_ATOM.fullmatch(t):
+                new_t = [split_by_regex(t, [SQUARE_BRACKET, DOUBLE_RING, SINGLE_RING])[0]]
+                if debug: import pdb; pdb.set_trace()
+                # Get ring membership
+                ring_membership = [ri for ri, ring in enumerate(rings) if atom_count in ring]
+                closed = []
+                # For ring in membership
+                for ri in ring_membership:
+                    # If it's not open, open it and label it
+                    if not ri in ring_map:
+                        ring_map[ri] = int2ring_number(ring_count)
+                        ring_open[ri] = atom_count
+                        new_t.append(ring_map[ri])
+                        ring_count += 1
+                    # Only close if it's adjacent to the opening atom, but not next atom in ring, and only one connection per open atom
+                    elif (atom_count in before_and_after(ring_open[ri], rings[ri])) and (not atom_count == sorted(rings[ri])[1]) and (ring_open[ri] not in closed):
+                        new_t.append(ring_map[ri])
+                        closed.append(ring_open[ri])
+                    else:
+                        pass
+                t = "".join(new_t)
+            atom_count += 1
+        new_tokens.append(t)
+    new_smiles = "".join(new_tokens)
+    logger.warning(f"Re-indexed SMILES rings from {smiles} -> {new_smiles}")
+    return new_smiles
 
 def correct_fragment_ring_numbers(smi1: str, smi2: str) -> str:
     """Given the rings in smi1, reindex the rings in smi2"""
