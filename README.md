@@ -53,10 +53,10 @@ smiles, nlls = FL.sample(batch_size=3)
 Notice the callable functions required CLM.sampler and CLM.evaluater. The first is a function that samples from the CLM given a prompt.
 
 ```python
-def CLM_sampler(prompt: str, batch_size: int):
+def CLM_sampler(prompt: Union[str, list[str]], batch_size: int):
     """
     Input: Must have a prompt and batch_size argument.
-    Output: SMILES (list), NLLs (list | np.array | torch.tensor)(CPU w.o. gradient)
+    Output: SMILES [list], NLLs Union[list, np.array, torch.tensor](CPU w.o. gradient)
     """
     # Encode prompt and sample as per model implementation
     return smiles, nlls
@@ -65,10 +65,10 @@ def CLM_sampler(prompt: str, batch_size: int):
 
 The second is a function that evaluates the NLL of a list of SMILES
 ```python
-def CLM_evaluater(smiles: list):
+def CLM_evaluater(smiles: list[str]):
     """
     Input: A list of SMILES
-    Output: NLLs (list | np.array | torch.tensor)(CPU w.o. gradient)
+    Output: NLLs [list, np.array, torch.tensor](CPU w.o. gradient)
     """
     return nlls
 ```
