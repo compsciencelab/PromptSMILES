@@ -3,7 +3,8 @@
 # (See accompanying file README.md file or copy at https://opensource.org/license/apache-2-0/)
 
 import random
-import warnings
+import logging
+logger = logging.getLogger("promptsmiles")
 from copy import deepcopy
 from typing import Callable
 from collections import namedtuple
@@ -19,21 +20,20 @@ class BaseSampler:
 
     def optimize_prompt(self, smiles: str, at_idx: int, reverse: bool, n_rand: int = 10, **kwargs):
         # ---- Randomize ----
-        # NOTE need to correct index from attachment point to "*"
-        at_idx = utils.correct_attachment_point(smiles, at_idx)
-        rand_smi = utils.randomize_smiles(smiles, n_rand=n_rand, random_type='restricted', rootAtom=at_idx, reverse=reverse)
-        if rand_smi is None:
-            warnings.warn(f"SMILES randomization failed for {smiles}, rearranging instead...")
+        at_idx = utils.correct_attachment_point(smiles, at_idx) # NOTE correcting attachment index to atom index
+        rand_smiles = utils.randomize_smiles(smiles, n_rand=n_rand, random_type='restricted', rootAtom=at_idx, reverse=reverse)
+        if rand_smiles is None:
+            logger.warn(f"SMILES randomization failed for {smiles}, rearranging instead...")
             return utils.root_smiles(smiles, at_idx, reverse=reverse), None
         # ---- Evaluate ----
         try:
-            nlls = self.evaluate_fn([utils.strip_attachment_points(smi)[0] for smi in rand_smi])
+            nlls = self.evaluate_fn([utils.strip_attachment_points(smi)[0] for smi in rand_smiles])
         except KeyError:
             # NOTE RDKit sometimes inserts a token that may not have been present in the vocabulary
-            warnings.warn(f"SMILES randomization failed for {smiles}, rearranging instead...")
+            logger.warn(f"SMILES evaluation failed for {smiles}, rearranging instead...")
             return utils.root_smiles(smiles, at_idx, reverse=reverse), None
         # ---- Sort ----
-        opt_smi, opt_nll = sorted(zip(rand_smi, nlls), key=lambda x: x[1])[0]
+        opt_smi, opt_nll = sorted(zip(rand_smiles, nlls), key=lambda x: x[1])[0]
         return opt_smi, opt_nll
 
 
@@ -197,7 +197,7 @@ class ScaffoldDecorator(BaseSampler):
                         nll=opt_nll
                         )
                 else:
-                    warnings.warn(f"SMILES optimization failed for {smiles}, stopping here.")
+                    logger.warn(f"SMILES optimization failed for {smiles}, stopping here.")
                     # Update variant
                     variant = self.variant(
                         orig_smiles=smi_w_at,
@@ -265,7 +265,7 @@ class ScaffoldDecorator(BaseSampler):
                                 )
                             )
                     else:
-                        warnings.warn(f"SMILES optimization failed for {smiles}, stopping here.")
+                        logger.warn(f"SMILES optimization failed for {smiles}, stopping here.")
                         new_variants.append(
                             self.variant(
                                 orig_smiles=smi_w_at,
@@ -361,7 +361,7 @@ class FragmentLinker(BaseSampler):
 
         # Correct scan
         if len(fragments) > 2 and not self.scan:
-            warnings.warn(f"Scan must be used for more than two fragments, Scan will be enabled.")
+            logger.warn(f"Scan must be used for more than two fragments, Scan will be enabled.")
             self.scan = True
 
         # Prepare fragments
@@ -619,7 +619,7 @@ class FragmentLinker(BaseSampler):
         if not return_all: return_all = self.return_all
         # Correct scan
         if self.n_fgs > 2 and not self.scan:
-            warnings.warn(f"Scan must be used for more than two fragments, Scan will be enabled.")
+            logger.warn(f"Scan must be used for more than two fragments, Scan will be enabled.")
             self.scan = True
 
         # Choose _single_sample, iterative _single_sample, or _batch_sample
