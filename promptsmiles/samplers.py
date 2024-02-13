@@ -23,14 +23,14 @@ class BaseSampler:
         at_idx = utils.correct_attachment_point(smiles, at_idx) # NOTE correcting attachment index to atom index
         rand_smiles = utils.randomize_smiles(smiles, n_rand=n_rand, random_type='restricted', rootAtom=at_idx, reverse=reverse)
         if rand_smiles is None:
-            logger.warn(f"SMILES randomization failed for {smiles} at {at_idx}, rearranging instead...")
+            logger.debug(f"SMILES randomization failed for {smiles} at {at_idx}, rearranging instead...")
             return utils.root_smiles(smiles, at_idx, reverse=reverse), None
         # ---- Evaluate ----
         try:
             nlls = self.evaluate_fn([utils.strip_attachment_points(smi)[0] for smi in rand_smiles])
         except KeyError:
             # NOTE RDKit sometimes inserts a token that may not have been present in the vocabulary
-            logger.warn(f"SMILES evaluation failed for {smiles} at {at_idx}, rearranging instead...")
+            logger.debug(f"SMILES evaluation failed for {smiles} at {at_idx}, rearranging instead...")
             return utils.root_smiles(smiles, at_idx, reverse=reverse), None
         # ---- Sort ----
         opt_smi, opt_nll = sorted(zip(rand_smiles, nlls), key=lambda x: x[1])[0]
@@ -199,7 +199,7 @@ class ScaffoldDecorator(BaseSampler):
                         nll=opt_nll
                         )
                 else:
-                    logger.warn(f"SMILES optimization failed for {smiles}, stopping here.")
+                    logger.debug(f"SMILES optimization failed for {smiles}, stopping here.")
                     # Update variant
                     variant = self.variant(
                         orig_smiles=smi_w_at,
@@ -267,7 +267,7 @@ class ScaffoldDecorator(BaseSampler):
                                 )
                             )
                     else:
-                        logger.warn(f"SMILES optimization failed for {smi}, stopping here.")
+                        logger.debug(f"SMILES optimization failed for {smi}, stopping here.")
                         new_variants.append(
                             self.variant(
                                 orig_smiles=smi_w_at,
