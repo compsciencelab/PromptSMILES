@@ -23,14 +23,14 @@ class BaseSampler:
         at_idx = utils.correct_attachment_point(smiles, at_idx) # NOTE correcting attachment index to atom index
         rand_smiles = utils.randomize_smiles(smiles, n_rand=n_rand, random_type='restricted', rootAtom=at_idx, reverse=reverse)
         if rand_smiles is None:
-            logger.warn(f"SMILES randomization failed for {smiles}, rearranging instead...")
+            logger.warn(f"SMILES randomization failed for {smiles} at {at_idx}, rearranging instead...")
             return utils.root_smiles(smiles, at_idx, reverse=reverse), None
         # ---- Evaluate ----
         try:
             nlls = self.evaluate_fn([utils.strip_attachment_points(smi)[0] for smi in rand_smiles])
         except KeyError:
             # NOTE RDKit sometimes inserts a token that may not have been present in the vocabulary
-            logger.warn(f"SMILES evaluation failed for {smiles}, rearranging instead...")
+            logger.warn(f"SMILES evaluation failed for {smiles} at {at_idx}, rearranging instead...")
             return utils.root_smiles(smiles, at_idx, reverse=reverse), None
         # ---- Sort ----
         opt_smi, opt_nll = sorted(zip(rand_smiles, nlls), key=lambda x: x[1])[0]
@@ -68,7 +68,7 @@ class DeNovo:
 
 
 class ScaffoldDecorator(BaseSampler):
-    def __init__(self, scaffold: str, batch_size: int, sample_fn: Callable, evaluate_fn: Callable, batch_prompts: bool = False, shuffle=True, return_all: bool = False, random_seed = 123, force_first: bool = False):
+    def __init__(self, scaffold: str, batch_size: int, sample_fn: Callable, evaluate_fn: Callable, batch_prompts: bool = False, shuffle=True, return_all: bool = False, random_seed = 123, force_first: bool = False, rdkit_logging=False):
         """
         A scaffold decorator class to sample from a scaffold constraint via iterative prompting.
 
@@ -114,6 +114,8 @@ class ScaffoldDecorator(BaseSampler):
         self.variant = namedtuple('variant', ['orig_smiles', 'opt_smiles', 'strip_smiles', 'at_pts', 'nll'])
         self.seed = random_seed
         random.seed(self.seed)
+        if not rdkit_logging:
+            utils.disable_rdkit_logging()
 
         # Prepare scaffold SMILES
         self.at_pts = utils.get_attachment_points(self.scaffold)
@@ -265,7 +267,7 @@ class ScaffoldDecorator(BaseSampler):
                                 )
                             )
                     else:
-                        logger.warn(f"SMILES optimization failed for {smiles}, stopping here.")
+                        logger.warn(f"SMILES optimization failed for {smi}, stopping here.")
                         new_variants.append(
                             self.variant(
                                 orig_smiles=smi_w_at,
@@ -312,7 +314,7 @@ class ScaffoldDecorator(BaseSampler):
 class FragmentLinker(BaseSampler):
     def __init__(
         self, fragments: list, batch_size: int, sample_fn: Callable, evaluate_fn: Callable, batch_prompts: bool = False, shuffle: bool = True, scan: bool = False,
-        detect_existing: bool = True, return_all: bool = False, random_seed = 123):
+        detect_existing: bool = True, return_all: bool = False, random_seed = 123, rdkit_logging=False):
         """
         A Fragment linker class to combine different fragments together via iterative prompting.
 
@@ -358,6 +360,8 @@ class FragmentLinker(BaseSampler):
         self.fragment = namedtuple('fragment', ['for_smiles', 'for_nll', 'rev_smiles', 'rev_nll'])
         self.seed = random_seed
         random.seed(self.seed)
+        if not rdkit_logging:
+            utils.disable_rdkit_logging()
 
         # Correct scan
         if len(fragments) > 2 and not self.scan:

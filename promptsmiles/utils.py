@@ -33,7 +33,10 @@ BR_OPEN = re.compile(r"(\()")
 BR_CLOSE = re.compile(r"(\))")
 BR = re.compile(r"(\(|\))")
 
-def disable_rdkit_logging(func):
+def disable_rdkit_logging():
+    RDLogger.DisableLog('rdApp.*')
+
+def disable_rdkit_logging_dec(func):
     def wrapper(*args,  **kwargs):
         RDLogger.DisableLog('rdApp.*')
         out = func(*args, **kwargs)
@@ -149,9 +152,6 @@ def randomize_smiles(smi, n_rand=10, random_type="restricted", rootAtom=None, re
 
     mol = Chem.MolFromSmiles(smi)
     if not mol: return None
-    #if Descriptors.RingCount(mol) >= 10:
-    #    warnings.warn("More than ten rings, uncertain about SMILES reversal behaviour so skipping")
-    #    return None
 
     if random_type == "unrestricted":
         rand_smiles = []
@@ -580,7 +580,6 @@ def detect_existing_fragment(smiles, frag_smiles):
 
 # ----- Useful functions for testing -----
 
-@disable_rdkit_logging
 def smiles_eq(smi1, smi2):
     mol1 = Chem.MolFromSmiles(smi1)
     mol2 = Chem.MolFromSmiles(smi2)
