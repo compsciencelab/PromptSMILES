@@ -8,7 +8,7 @@ import random
 import logging
 logger = logging.getLogger("promptsmiles")
 
-from rdkit import Chem
+from rdkit import Chem, RDLogger
 from rdkit.Chem import Descriptors, rdqueries
 import rdkit.Chem.Draw as Draw
 
@@ -32,6 +32,14 @@ ATTCH = re.compile(r"(\*)")
 BR_OPEN = re.compile(r"(\()")
 BR_CLOSE = re.compile(r"(\))")
 BR = re.compile(r"(\(|\))")
+
+def disable_rdkit_logging(func):
+    def wrapper(*args,  **kwargs):
+        RDLogger.DisableLog('rdApp.*')
+        out = func(*args, **kwargs)
+        RDLogger.EnableLog('rdApp.*')
+        return out
+    return wrapper
 
 class SMILESTokenizer:
     """Deals with the tokenization and untokenization of SMILES."""
@@ -391,27 +399,41 @@ def _seek_source_atom(smiles_or_tokens, idx):
             found = True
     return idx
 
-def get_attachment_points(smi: str) -> list:
+def get_attachment_points(smi: str, return_map: bool = False) -> list:
     tokens = split_by_regex(smi, [RING_ATOM, SQUARE_BRACKET, BRCL, BR_ATTCH, ATTCH, ATOM])
     atom_counter = 0
-    attachment_points = []
+    all_counter = 0
+    token2atom_map = {}
+    attch2dummy_map = {}
+    #attachment_points = []
     for ti, t in enumerate(tokens):
         
         if ATTCH.fullmatch(t) or BR_ATTCH.fullmatch(t):
             # If it's the first atom
             if ti == 0:
-                attachment_points.append(atom_counter+1) # Seek next atom...
+                # Seek next atom...
+                #attachment_points.append(atom_counter+1) 
+                attch2dummy_map[atom_counter+1] = all_counter
             # NOTE correcting for preceeding branches i.e., see previous atom...
             elif (ti > 0) and BR_CLOSE.fullmatch(tokens[ti-1]):
                 source_ti = _seek_source_atom(tokens, ti)
-                attachment_points.append(source_ti)
+                #attachment_points.append(token2atom_map[source_ti])
+                attch2dummy_map[token2atom_map[source_ti]] = all_counter
             # Otherwise it's the previous atom
             else:
-                attachment_points.append(atom_counter-1)
+                #attachment_points.append(atom_counter-1)
+                attch2dummy_map[atom_counter-1] = all_counter
+            all_counter += 1
 
         if any([regex.fullmatch(t) for regex in [RING_ATOM, SQUARE_BRACKET, BRCL, ATOM]]):
+            token2atom_map[ti] = atom_counter
             atom_counter += 1
-    return attachment_points
+            all_counter += 1
+
+    if return_map:
+        return attch2dummy_map
+    else:
+        return list(attch2dummy_map.keys())
 
 def insert_attachment_points(smi: str, at_pts: list):
     tokens = split_by_regex(smi, [RING_ATOM, SQUARE_BRACKET, BRCL, BR_ATTCH, ATTCH, ATOM])
@@ -428,22 +450,8 @@ def insert_attachment_points(smi: str, at_pts: list):
 
 def correct_attachment_point(smi: str, at_pt: int) -> int:
     """Switch attachment point index to wildcard index in atom"""
-    tokens = split_by_regex(smi, [RING_ATOM, SQUARE_BRACKET, BRCL, BR_ATTCH, ATTCH, ATOM])
-    # If it's the first token it's zero
-    if BR_ATTCH.fullmatch(tokens[0]) or ATTCH.fullmatch(tokens[0]):
-        return 0
-    # Otherwise we need to count corrections
-    atom_counter = 0
-    correction = 1
-    for t in tokens:
-        if at_pt == atom_counter: 
-            break
-        if BR_ATTCH.fullmatch(t) or ATTCH.fullmatch(t):
-            correction += 1
-        if any([regex.fullmatch(t) for regex in [RING_ATOM, SQUARE_BRACKET, BRCL, ATOM]]):
-            atom_counter += 1
-    
-    return at_pt + correction
+    attch2dummy_map = get_attachment_points(smi, return_map=True)
+    return attch2dummy_map[at_pt]
 
 def strip_attachment_points(smi: str):
     """
@@ -573,6 +581,7 @@ def detect_existing_fragment(smiles, frag_smiles):
 
 # ----- Useful functions for testing -----
 
+@disable_rdkit_logging
 def smiles_eq(smi1, smi2):
     mol1 = Chem.MolFromSmiles(smi1)
     mol2 = Chem.MolFromSmiles(smi2)
