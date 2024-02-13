@@ -31,8 +31,6 @@ if not TEST_SCAFFOLD:
     with open(os.path.join(os.path.dirname(__file__), "test_scaffolds.scaff")) as f:
         TEST_SCAFFOLD.extend([smi.strip() for smi in f.readlines()])
 
-# TODO test fragments
-# TODO test randomize with random root?
 
 # --------------------- Broad tests ------------------------
 @pytest.mark.parametrize("smiles", TEST_SMILES)
@@ -73,10 +71,58 @@ def test_randomize(scaffold):
 
 
 # --------------------- Specific tests ---------------------
-@pytest.mark.parametrize("smiles,at_pt,expected",[
+# smi, attachment_point, RDKit_atom_index
+scaffold_parameters = [
     ("c1(*)cc(*)ccc1", 0, 1),
-    ("c1(*)cc(*)ccc1", 2, 4)
-])
-def test_correct_attachment(smiles, at_pt, expected):
+    ("c1(*)cc(*)ccc1", 2, 4),
+    ("C(*)c1nc(*)n2[nH]c(-c3c(*)c(*)c(F)c(S(=O)(=O)N4C(*)C(*)N(*)C(*)C4(*))c3(*))nc(=O)c12", 0, 1),
+    ("C(*)c1nc(*)n2[nH]c(-c3c(*)c(*)c(F)c(S(=O)(=O)N4C(*)C(*)N(*)C(*)C4(*))c3(*))nc(=O)c12", 3, 5),
+    ("C(*)c1nc(*)n2[nH]c(-c3c(*)c(*)c(F)c(S(=O)(=O)N4C(*)C(*)N(*)C(*)C4(*))c3(*))nc(=O)c12", 8, 11),
+    ("C(*)c1nc(*)n2[nH]c(-c3c(*)c(*)c(F)c(S(=O)(=O)N4C(*)C(*)N(*)C(*)C4(*))c3(*))nc(=O)c12", 9, 13),
+    ("C(*)c1nc(*)n2[nH]c(-c3c(*)c(*)c(F)c(S(=O)(=O)N4C(*)C(*)N(*)C(*)C4(*))c3(*))nc(=O)c12", 17, 22),
+    ("C(*)c1nc(*)n2[nH]c(-c3c(*)c(*)c(F)c(S(=O)(=O)N4C(*)C(*)N(*)C(*)C4(*))c3(*))nc(=O)c12", 18, 24),
+    ("C(*)c1nc(*)n2[nH]c(-c3c(*)c(*)c(F)c(S(=O)(=O)N4C(*)C(*)N(*)C(*)C4(*))c3(*))nc(=O)c12", 19, 26),
+    ("C(*)c1nc(*)n2[nH]c(-c3c(*)c(*)c(F)c(S(=O)(=O)N4C(*)C(*)N(*)C(*)C4(*))c3(*))nc(=O)c12", 20, 28),
+    ("C(*)c1nc(*)n2[nH]c(-c3c(*)c(*)c(F)c(S(=O)(=O)N4C(*)C(*)N(*)C(*)C4(*))c3(*))nc(=O)c12", 21, 30),
+    ("C(*)c1nc(*)n2[nH]c(-c3c(*)c(*)c(F)c(S(=O)(=O)N4C(*)C(*)N(*)C(*)C4(*))c3(*))nc(=O)c12", 22, 32),
+    ('C(*)Oc1c(*)nc(*)c(*)c1-c1c(*)c(*)c(*)c(NC(=O)C(*)c2c(*)c(*)n(C(*))n2)c1(*)', 0, 1),
+    ('C(*)Oc1c(*)nc(*)c(*)c1-c1c(*)c(*)c(*)c(NC(=O)C(*)c2c(*)c(*)n(C(*))n2)c1(*)', 3, 5),
+    ('C(*)Oc1c(*)nc(*)c(*)c1-c1c(*)c(*)c(*)c(NC(=O)C(*)c2c(*)c(*)n(C(*))n2)c1(*)', 5, 8),
+    ('C(*)Oc1c(*)nc(*)c(*)c1-c1c(*)c(*)c(*)c(NC(=O)C(*)c2c(*)c(*)n(C(*))n2)c1(*)', 6, 10),
+    ('C(*)Oc1c(*)nc(*)c(*)c1-c1c(*)c(*)c(*)c(NC(=O)C(*)c2c(*)c(*)n(C(*))n2)c1(*)', 9, 14),
+    ('C(*)Oc1c(*)nc(*)c(*)c1-c1c(*)c(*)c(*)c(NC(=O)C(*)c2c(*)c(*)n(C(*))n2)c1(*)', 10, 16),
+    ('C(*)Oc1c(*)nc(*)c(*)c1-c1c(*)c(*)c(*)c(NC(=O)C(*)c2c(*)c(*)n(C(*))n2)c1(*)', 11, 18),
+    ('C(*)Oc1c(*)nc(*)c(*)c1-c1c(*)c(*)c(*)c(NC(=O)C(*)c2c(*)c(*)n(C(*))n2)c1(*)', 16, 24),
+    ('C(*)Oc1c(*)nc(*)c(*)c1-c1c(*)c(*)c(*)c(NC(=O)C(*)c2c(*)c(*)n(C(*))n2)c1(*)', 18, 27),
+    ('C(*)Oc1c(*)nc(*)c(*)c1-c1c(*)c(*)c(*)c(NC(=O)C(*)c2c(*)c(*)n(C(*))n2)c1(*)', 19, 29),
+    ('C(*)Oc1c(*)nc(*)c(*)c1-c1c(*)c(*)c(*)c(NC(=O)C(*)c2c(*)c(*)n(C(*))n2)c1(*)', 21, 32),
+    ('C(*)Oc1c(*)nc(*)c(*)c1-c1c(*)c(*)c(*)c(NC(=O)C(*)c2c(*)c(*)n(C(*))n2)c1(*)', 23, 35),
+    ('C(*)C(*)N(C(*)=O)c1c(*)c(*)c(c(*)c1(*))N1C(*)C(*)C(*)C(*)C1=O', 0, 1),
+    ('C(*)C(*)N(C(*)=O)c1c(*)c(*)c(c(*)c1(*))N1C(*)C(*)C(*)C(*)C1=O', 1, 3),
+    ('C(*)C(*)N(C(*)=O)c1c(*)c(*)c(c(*)c1(*))N1C(*)C(*)C(*)C(*)C1=O', 3, 6),
+    ('C(*)C(*)N(C(*)=O)c1c(*)c(*)c(c(*)c1(*))N1C(*)C(*)C(*)C(*)C1=O', 6, 10),
+    ('C(*)C(*)N(C(*)=O)c1c(*)c(*)c(c(*)c1(*))N1C(*)C(*)C(*)C(*)C1=O', 7, 12),
+    ('C(*)C(*)N(C(*)=O)c1c(*)c(*)c(c(*)c1(*))N1C(*)C(*)C(*)C(*)C1=O', 9, 15),
+    ('C(*)C(*)N(C(*)=O)c1c(*)c(*)c(c(*)c1(*))N1C(*)C(*)C(*)C(*)C1=O', 10, 17),
+    ('C(*)C(*)N(C(*)=O)c1c(*)c(*)c(c(*)c1(*))N1C(*)C(*)C(*)C(*)C1=O', 12, 20),
+    ('C(*)C(*)N(C(*)=O)c1c(*)c(*)c(c(*)c1(*))N1C(*)C(*)C(*)C(*)C1=O', 13, 22),
+    ('C(*)C(*)N(C(*)=O)c1c(*)c(*)c(c(*)c1(*))N1C(*)C(*)C(*)C(*)C1=O', 14, 24),
+    ('C(*)C(*)N(C(*)=O)c1c(*)c(*)c(c(*)c1(*))N1C(*)C(*)C(*)C(*)C1=O', 15, 26),
+    ('c1(*)c(*)c(-c2c(OC(*))c(*)nc(*)c2(*))c(*)c(NC(C(c2c(*)c(*)n(C(*))n2)(*))=O)c1(*)', 15, 32),
+    ('c1(*)c(-c2c(OC(*))c(*)nc(*)c2(*))c(*)c(NC(=O)C(c2c(*)c(*)n(C(*))n2)(*))c(*)c1(*))', 15, 31)
+    ]
+
+@pytest.mark.parametrize("smiles,at_pt,rd_pt", scaffold_parameters)
+def test_correct_attachment(smiles, at_pt, rd_pt):
     """Check if we can correct attachment points to the actual wildcard"""
-    assert utils.correct_attachment_point(smiles, at_pt) == expected
+    assert utils.correct_attachment_point(smiles, at_pt) == rd_pt
+
+@pytest.mark.parametrize("smiles,at_pt,rd_pt", scaffold_parameters)
+def test_get_attachment(smiles, at_pt, rd_pt):
+    """Check if we can correct attachment points to the actual wildcard"""
+    at_pts = utils.get_attachment_points(smiles)
+    assert at_pt in at_pts
+
+# TODO test 
+# TODO test fragments
+# TODO test randomize with random root?
