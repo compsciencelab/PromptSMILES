@@ -24,6 +24,7 @@ ATOM = re.compile(r"([a-zA-Z])")
 # The atom may also be wrapped in square brackets []
 # The atom should not be *within* square brackets, e.g., "[NH2+]2" is a ring atom but not the "H2" inside it
 RING_ATOM = re.compile(r"([a-zA-Z][%0-9]+(?![^[]*\])|[a-zA-Z][-=#:][%0-9]+(?![^[]*\])|\[[^\]]*\][%0-9]+(?![^[]*\])|\[[^\]]*\][-=#:][%0-9]+(?![^[]*\]))")
+# The following regex identifies ring numbers seperated by an explicit bond e.g., C2-3, whereas above only recognizes C-2
 #RING_ATOM = re.compile(r"([a-zA-Z][%0-9][-=#][%0-9]+(?![^[]*\])|[a-zA-Z][%0-9]+(?![^[]*\])|[a-zA-Z][-=#][%0-9]+(?![^[]*\])|\[[^\]]*\][%0-9][-=#][%0-9]+(?![^[]*\])|\[[^\]]*\][%0-9]+(?![^[]*\])|\[[^\]]*\][-=#][%0-9]+(?![^[]*\]))")
 SINGLE_RING = re.compile(r"([0-9]{1})")
 DOUBLE_RING = re.compile(r"(%[0-9]{2})")
