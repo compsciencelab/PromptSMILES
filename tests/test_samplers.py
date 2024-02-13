@@ -1,9 +1,12 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the Apache 2.0 License.
+# (See accompanying file README.md file or copy at https://opensource.org/license/apache-2-0/)
+
 import random
 import pytest
 from promptsmiles import utils, samplers
 
 def evaluate_fn(smiles: list):
-    random.seed(123)
     return [random.randint(0, 40) for i in range(len(smiles))]
 
 def sample_scaffold_fn(prompt, batch_size):
@@ -110,4 +113,120 @@ def test_decoration_batch_shuffle(scaffold, expected):
     assert len(denovo) == 10
     assert all([utils.smiles_eq(smiles, expected) for smiles in denovo])
 
+
 # --------------------- Fragment linking ---------------------
+fragment_params1 = [ # frag1, frag2, expected
+    ("C1CC1(*)", "c1cc(*)cc(Cl)c1", "C1CC1CCOCCc1cc(Cl)ccc1")
+]
+
+@pytest.mark.parametrize("frag1,frag2,expected", fragment_params1)
+def test_linking_canonical(frag1, frag2, expected):
+    SD = samplers.FragmentLinker(
+        fragments=[frag1, frag2],
+        batch_size=10,
+        sample_fn=sample_linker_fn,
+        evaluate_fn=evaluate_fn,
+        batch_prompts=False,
+        shuffle=False,
+        scan=False,
+        detect_existing=False,
+        return_all=False
+        )
+    denovo, nlls = SD.sample()
+    assert len(denovo) == 10
+    assert all([utils.smiles_eq(smiles, expected) for smiles in denovo])
+
+@pytest.mark.parametrize("frag1,frag2,expected", fragment_params1)
+def test_linking_shuffle(frag1, frag2, expected):
+    SD = samplers.FragmentLinker(
+        fragments=[frag1, frag2],
+        batch_size=10,
+        sample_fn=sample_linker_fn,
+        evaluate_fn=evaluate_fn,
+        batch_prompts=False,
+        shuffle=True,
+        scan=False,
+        detect_existing=False,
+        return_all=False
+        )
+    denovo, nlls = SD.sample()
+    assert len(denovo) == 10
+    assert all([utils.smiles_eq(smiles, expected) for smiles in denovo])
+
+@pytest.mark.parametrize("frag1,frag2,expected", fragment_params1)
+def test_linking_batch_canonical(frag1, frag2, expected):
+    SD = samplers.FragmentLinker(
+        fragments=[frag1, frag2],
+        batch_size=10,
+        sample_fn=sample_linker_fn,
+        evaluate_fn=evaluate_fn,
+        batch_prompts=True,
+        shuffle=False,
+        scan=False,
+        detect_existing=False,
+        return_all=False
+        )
+    denovo, nlls = SD.sample()
+    assert len(denovo) == 10
+    assert all([utils.smiles_eq(smiles, expected) for smiles in denovo])
+
+@pytest.mark.parametrize("frag1,frag2,expected", fragment_params1)
+def test_linking_batch_shuffle(frag1, frag2, expected):
+    SD = samplers.FragmentLinker(
+        fragments=[frag1, frag2],
+        batch_size=10,
+        sample_fn=sample_linker_fn,
+        evaluate_fn=evaluate_fn,
+        batch_prompts=True,
+        shuffle=True,
+        scan=False,
+        detect_existing=False,
+        return_all=False
+        )
+    denovo, nlls = SD.sample()
+    assert len(denovo) == 10
+    assert all([utils.smiles_eq(smiles, expected) for smiles in denovo])
+
+@pytest.mark.parametrize("frag1,frag2,expected", fragment_params1)
+def test_linking_scan(frag1, frag2, expected):
+    SD = samplers.FragmentLinker(
+        fragments=[frag1, frag2],
+        batch_size=10,
+        sample_fn=sample_linker_fn,
+        evaluate_fn=evaluate_fn,
+        batch_prompts=False,
+        shuffle=True,
+        scan=True,
+        detect_existing=False,
+        return_all=False
+        )
+    denovo, nlls = SD.sample()
+    assert len(denovo) == 10
+    # Extract linker, and check it's what we expect
+    for smiles in denovo:
+        linker = utils.extract_linker(smiles, [frag1, frag2])
+        if linker:
+            assert utils.strip_attachment_points(linker)[0] == "CCOCC"
+
+@pytest.mark.parametrize("frag1,frag2,expected", fragment_params1)
+def test_linking_batch_scan(frag1, frag2, expected):
+    SD = samplers.FragmentLinker(
+        fragments=[frag1, frag2],
+        batch_size=10,
+        sample_fn=sample_linker_fn,
+        evaluate_fn=evaluate_fn,
+        batch_prompts=True,
+        shuffle=True,
+        scan=True,
+        detect_existing=False,
+        return_all=False
+        )
+    denovo, nlls = SD.sample()
+    assert len(denovo) == 10
+    # Extract linker, and check it's what we expect
+    for smiles in denovo:
+        linker = utils.extract_linker(smiles, [frag1, frag2])
+        if linker:
+            assert utils.strip_attachment_points(linker)[0] == "CCOCC"
+
+# TODO test detect_existing, how? Depends on starting fragment, depends on linker containing a fragment

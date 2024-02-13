@@ -536,7 +536,6 @@ def extract_linker(smiles, fragments=[], return_all=False):
     linker = Chem.MolToSmiles(mol)
     if "." in linker:
         links = [f.count("*") for i, f in enumerate(linker.split("."))]
-        #linker = linker.split(".")[np.argmax(links)]
         linker = sorted(linker.split("."), key=lambda x: f.count("*"))[-1]
 
     return linker

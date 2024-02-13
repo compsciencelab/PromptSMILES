@@ -123,6 +123,4 @@ def test_get_attachment(smiles, at_pt, rd_pt):
     at_pts = utils.get_attachment_points(smiles)
     assert at_pt in at_pts
 
-# TODO test 
-# TODO test fragments
-# TODO test randomize with random root?
+# TODO test fragments utils

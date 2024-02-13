@@ -11,7 +11,6 @@ c1(*)cc2ncc(*)c(N3CCNCC3)c2cc1(*)
 C(*)NC1=NN=C(c2ccc3[nH]c(=O)[nH]c3c2)CS1
 C(*)#Cc1ccc(OCc2nnc(S(*))n2-c2cccnc2)cc1(*)
 C(*)C1=C(*)C(*)N=C(c2nccs2)N1
-c1(*)ccccc1-c1ccc2c(c1)n(*)c(=O)n2C(C[SH](*)(C)=O)c1ccc(OC)cc1
 c1(*)ccc2[nH]c3c(c2c1)CN(c1ccc2oc(N4CCOCC4)nc2c1)CC3
 C(*)c1cc(O(*))c(Nc2ncc(*)c(Nc3ccccc3(*))n2)cc1(*)
 C(*)=CC(=O)CC(=O)C(*)=C
