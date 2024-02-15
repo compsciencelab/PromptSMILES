@@ -11,32 +11,33 @@ from collections import namedtuple
 
 from promptsmiles import utils
 
-
 class BaseSampler:
-    def __init__(self, sample_fn: Callable, evaluate_fn: Callable, **kwargs):
+    def __init__(self, sample_fn: Callable, evaluate_fn: Callable, optimize_prompts: bool, **kwargs):
         self.sample_fn = sample_fn
         self.evaluate_fn = evaluate_fn
+        self.optimize_prompts = optimize_prompts
         self.tokenizer = utils.SMILESTokenizer()
 
-    def optimize_prompt(self, smiles: str, at_idx: int, reverse: bool, n_rand: int = 10, **kwargs):
+    def rearrange_prompt(self, smiles: str, at_idx: int, reverse: bool, n_rand: int = 10, **kwargs):
         # ---- Randomize ----
         at_idx = utils.correct_attachment_point(smiles, at_idx) # NOTE correcting attachment index to atom index
-        rand_smiles = utils.randomize_smiles(smiles, n_rand=n_rand, random_type='restricted', rootAtom=at_idx, reverse=reverse)
-        if rand_smiles:
-            # ---- Evaluate ----
-            try:
-                nlls = self.evaluate_fn([utils.strip_attachment_points(smi)[0] for smi in rand_smiles])
-                # ---- Sort ----
-                opt_smi, opt_nll = sorted(zip(rand_smiles, nlls), key=lambda x: x[1])[0]
-                return opt_smi, opt_nll
+        if self.optimize_prompts:
+            rand_smiles = utils.randomize_smiles(smiles, n_rand=n_rand, random_type='restricted', rootAtom=at_idx, reverse=reverse)
+            if rand_smiles:
+                # ---- Evaluate ----
+                try:
+                    nlls = self.evaluate_fn([utils.strip_attachment_points(smi)[0] for smi in rand_smiles])
+                    # ---- Sort ----
+                    opt_smi, opt_nll = sorted(zip(rand_smiles, nlls), key=lambda x: x[1])[0]
+                    return opt_smi, opt_nll
 
-            except KeyError:
-                # NOTE RDKit sometimes inserts a token that may not have been present in the vocabulary
-                logger.debug(f"SMILES evaluation failed for {smiles} at {at_idx}, rearranging instead...")
-                
-        else:
-            # NOTE RDKit sometimes creates duplicate ring indexes for different rings causing an error upon reversal
-            logger.debug(f"SMILES randomization failed for {smiles} at {at_idx}, rearranging instead...")
+                except KeyError:
+                    # NOTE RDKit sometimes inserts a token that may not have been present in the vocabulary
+                    logger.debug(f"SMILES evaluation failed for {smiles} at {at_idx}, rearranging instead...")
+                    
+            else:
+                # NOTE RDKit sometimes creates duplicate ring indexes for different rings causing an error upon reversal
+                logger.debug(f"SMILES randomization failed for {smiles} at {at_idx}, rearranging instead...")
 
         return utils.root_smiles(smiles, at_idx, reverse=reverse), None
 
@@ -72,7 +73,19 @@ class DeNovo:
 
 
 class ScaffoldDecorator(BaseSampler):
-    def __init__(self, scaffold: str, batch_size: int, sample_fn: Callable, evaluate_fn: Callable, batch_prompts: bool = False, shuffle=True, return_all: bool = False, random_seed = 123, force_first: bool = False, rdkit_logging=False):
+    def __init__(
+        self,
+        scaffold: str,
+        batch_size: int,
+        sample_fn: Callable,
+        evaluate_fn: Callable,
+        batch_prompts: bool = False,
+        optimize_prompts: bool = True,
+        shuffle = True,
+        return_all: bool = False,
+        random_seed = 123,
+        force_first: bool = False,
+        rdkit_logging=False):
         """
         A scaffold decorator class to sample from a scaffold constraint via iterative prompting.
 
@@ -92,6 +105,8 @@ class ScaffoldDecorator(BaseSampler):
                 return nlls: Union[list, np.array, torch.tensor] (on CPU without gradients)
         batch_prompts : bool, optional
             Whether the sample_fn can accept a list of prompts equal to batch_size, by default False
+        optimize_prompts : bool, optional
+            Whether to optimize the SMILES string for the attachment point, by default True
         shuffle : bool, optional
             Whether to shuffle the attachment points, by default True
         return_all : bool, optional
@@ -106,7 +121,7 @@ class ScaffoldDecorator(BaseSampler):
         smiles : list
             A list of generated SMILES with a scaffold decorated.
         """
-        super().__init__(sample_fn, evaluate_fn)
+        super().__init__(sample_fn, evaluate_fn, optimize_prompts)
         self.batch_size = batch_size
         self.batch_prompts = batch_prompts
         self.shuffle = shuffle
@@ -144,7 +159,7 @@ class ScaffoldDecorator(BaseSampler):
         # Optimize all other attachment points
         variants = []
         for aidx in self.at_pts:
-            opt_smi, opt_nll = self.optimize_prompt(self.scaffold, aidx, reverse=True)
+            opt_smi, opt_nll = self.rearrange_prompt(self.scaffold, aidx, reverse=True)
             strip_smi, rem_pts = utils.strip_attachment_points(opt_smi)
             rem_pts.pop(-1)
             variants.append(
@@ -156,7 +171,8 @@ class ScaffoldDecorator(BaseSampler):
                     nll=opt_nll
                     )
                 )
-        variants.sort(key=lambda x: x.nll)
+        if self.optimize_prompts:
+            variants.sort(key=lambda x: x.nll)
         self.variants.extend(variants)
 
     def _single_sample(self, shuffle: bool = None, return_all: bool = None):
@@ -178,6 +194,7 @@ class ScaffoldDecorator(BaseSampler):
             prompt = variant.strip_smiles
             smiles, nll = self.sample_fn(prompt=prompt, batch_size=1)
             smiles, nll = smiles[0], nll[0]
+            assert smiles.startswith(prompt), f"Sampled SMILES {smiles} does not start with prompt {prompt}, why not?"
             batch_smiles.append(smiles)
             batch_nlls.append(nll)
             n_rem -= 1
@@ -188,9 +205,9 @@ class ScaffoldDecorator(BaseSampler):
                 # Select another
                 if shuffle: i = random.randint(0, n_rem-1)
                 else: i = 0
-                sel_pt = variant.at_pts.pop(i)
+                sel_pt = variant.at_pts[i]
                 # Optimize & strip
-                opt_smi, opt_nll = self.optimize_prompt(smi_w_at, sel_pt, reverse=True)
+                opt_smi, opt_nll = self.rearrange_prompt(smi_w_at, sel_pt, reverse=True)
                 if opt_smi:
                     strip_smi, rem_pts = utils.strip_attachment_points(opt_smi)
                     rem_pts.pop(-1) # remove the last one
@@ -209,7 +226,7 @@ class ScaffoldDecorator(BaseSampler):
                         orig_smiles=smi_w_at,
                         opt_smiles=smiles,
                         strip_smiles=smiles,
-                        at_pts=variant.at_pts,
+                        at_pts=deepcopy(variant.at_pts),
                         nll=None
                         )
 
@@ -249,14 +266,16 @@ class ScaffoldDecorator(BaseSampler):
             if n_rem:
                 new_variants = []
                 for smi, variant in zip(smiles, batch_variants):
+                    assert smi.startswith(variant.strip_smiles), f"Sampled SMILES {smi} does not start with prompt {variant.strip_smiles}, why not?"
+                    
                     # Insert remaining attachment points
                     smi_w_at = utils.insert_attachment_points(smi, variant.at_pts)
                     # Select another
                     if shuffle: i = random.randint(0, n_rem-1)
                     else: i = 0
-                    sel_pt = variant.at_pts.pop(i)
+                    sel_pt = variant.at_pts[i]
                     # Optimize & strip
-                    opt_smi, opt_nll = self.optimize_prompt(smi_w_at, sel_pt, reverse=True)
+                    opt_smi, opt_nll = self.rearrange_prompt(smi_w_at, sel_pt, reverse=True)
                     if opt_smi:
                         strip_smi, rem_pts = utils.strip_attachment_points(opt_smi)
                         rem_pts.pop(-1) # remove the last one
@@ -277,7 +296,7 @@ class ScaffoldDecorator(BaseSampler):
                                 orig_smiles=smi_w_at,
                                 opt_smiles=smi,
                                 strip_smiles=smi,
-                                at_pts=variant.at_pts,
+                                at_pts=deepcopy(variant.at_pts),
                                 nll=None
                                 )
                             )
@@ -317,8 +336,19 @@ class ScaffoldDecorator(BaseSampler):
 
 class FragmentLinker(BaseSampler):
     def __init__(
-        self, fragments: list, batch_size: int, sample_fn: Callable, evaluate_fn: Callable, batch_prompts: bool = False, shuffle: bool = True, scan: bool = False,
-        detect_existing: bool = True, return_all: bool = False, random_seed = 123, rdkit_logging=False):
+        self,
+        fragments: list,
+        batch_size: int,
+        sample_fn: Callable,
+        evaluate_fn: Callable,
+        batch_prompts: bool = False,
+        optimize_prompts: bool = True,
+        shuffle: bool = True,
+        scan: bool = False,
+        detect_existing: bool = True,
+        return_all: bool = False,
+        random_seed = 123,
+        rdkit_logging=False):
         """
         A Fragment linker class to combine different fragments together via iterative prompting.
 
@@ -338,6 +368,8 @@ class FragmentLinker(BaseSampler):
                 return nlls: Union[list, np.array, torch.tensor] (on CPU without gradients)
         batch_prompts : bool, optional
             Whether the sample_fn can accept a list of prompts equal to batch_size, by default False
+        optimize_prompts : bool, optional
+            Whether to optimize the SMILES string for the attachment point, by default True
         shuffle : bool, optional
             Whether to shuffle the attachment points, by default True
         scan : bool, optional
@@ -352,7 +384,7 @@ class FragmentLinker(BaseSampler):
         smiles : list
             A list of generated SMILES with a fragments linked.
         """
-        super().__init__(sample_fn, evaluate_fn)
+        super().__init__(sample_fn, evaluate_fn, optimize_prompts)
         self.batch_size = batch_size
         self.batch_prompts = batch_prompts
         self.shuffle = shuffle
@@ -380,9 +412,9 @@ class FragmentLinker(BaseSampler):
             aidx = utils.get_attachment_points(frag)
             assert len(aidx) == 1, f"Fragment {frag} should only have one attachment point"
             # Optimize forward direction
-            for_smi, for_nll = self.optimize_prompt(frag, aidx[0], reverse=False)
+            for_smi, for_nll = self.rearrange_prompt(frag, aidx[0], reverse=False)
             # Optimize reverse direction
-            rev_smi, rev_nll = self.optimize_prompt(frag, aidx[0], reverse=True)
+            rev_smi, rev_nll = self.rearrange_prompt(frag, aidx[0], reverse=True)
             # Append
             self.fragments.append(
                 self.fragment(
@@ -392,7 +424,8 @@ class FragmentLinker(BaseSampler):
                     rev_nll=rev_nll
                     )
             )
-        self.fragments.sort(key=lambda x: x.for_nll)
+        if self.optimize_prompts:
+            self.fragments.sort(key=lambda x: x.for_nll)
 
     def _single_sample(self, shuffle: bool = None, scan: bool = None, detect_existing: bool = None, return_all: bool = None):
         # Set parameters
@@ -416,7 +449,8 @@ class FragmentLinker(BaseSampler):
         frag_indexes = list(range(len(prompt_tokens)))
         smiles, nll = self.sample_fn(prompt=prompt, batch_size=1)
         smiles, nll = smiles[0], nll[0]
-        smiles_tokens = self.tokenizer.tokenize(smiles, with_begin_and_end=False) # TODO tokenize by ring atom too?
+        assert smiles.startswith(prompt), f"Sampled SMILES {smiles} does not start with prompt {prompt}, why not?"
+        smiles_tokens = self.tokenizer.tokenize(smiles, with_begin_and_end=False)
         batch_smiles.append(smiles)
         batch_nlls.append(nll)
         n_rem -= 1
@@ -535,6 +569,7 @@ class FragmentLinker(BaseSampler):
                 n_nlls = []
                 n_idxs = []
                 for bi, (smiles, nll, fragments, existing_indexes) in enumerate(zip(batch_smiles[-1], batch_nlls[-1], batch_fragments, frag_indexes)):
+                    assert smiles.startswith(prompts[bi]), f"Sampled SMILES {smiles} does not start with prompt {prompts[bi]}, why not?"
                     # Select another fragment
                     if shuffle: i = random.randint(0, n_rem-1)
                     else: i = 0
@@ -583,7 +618,8 @@ class FragmentLinker(BaseSampler):
                 n_rem -= 1
         else:
             concat_smiles = []
-            for smiles, fragments in zip(batch_smiles[0], batch_fragments):
+            for bi, (smiles, fragments) in enumerate(zip(batch_smiles[0], batch_fragments)):
+                assert smiles.startswith(prompts[bi]), f"Sampled SMILES {smiles} does not start with prompt {prompts[bi]}, why not?"
                 fi = fragments.pop(0)
                 # Detect existing fragments
                 exists = False
