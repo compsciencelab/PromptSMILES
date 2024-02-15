@@ -134,6 +134,8 @@ def root_smiles(smi, rootAtom=None, reverse=False):
         new_smi = Chem.MolToSmiles(mol, rootedAtAtom=rootAtom)
         if reverse:
             new_smi = reverse_smiles(new_smi)
+        # Convert back to (*)
+        new_smi = bracket_attachments(new_smi)
     return new_smi
 
 def randomize_smiles(smi, n_rand=10, random_type="restricted", rootAtom=None, reverse=False):
@@ -197,11 +199,11 @@ def randomize_smiles(smi, n_rand=10, random_type="restricted", rootAtom=None, re
             if reverse:
                 rev_random_smiles = reverse_smiles(random_smiles)
                 # NOTE sometimes RDKit assigns the same ring index to different rings, causing an error upon reversing, so let's try again in this case
-                if smiles_eq(random_smiles, rev_random_smiles)[0]:
-                    random_smiles = rev_random_smiles
-                else:
+                #if smiles_eq(random_smiles, rev_random_smiles)[0]:
+                #    random_smiles = rev_random_smiles
+                #else:
                     # Keep trying until we find one without RDKit reusing ring indexes
-                    continue
+                #    continue
 
             # Convert back to (*)
             random_smiles = bracket_attachments(random_smiles)
@@ -406,23 +408,19 @@ def get_attachment_points(smi: str, return_map: bool = False) -> list:
     all_counter = 0
     token2atom_map = {}
     attch2dummy_map = {}
-    #attachment_points = []
     for ti, t in enumerate(tokens):
         
         if ATTCH.fullmatch(t) or BR_ATTCH.fullmatch(t):
             # If it's the first atom
             if ti == 0:
                 # Seek next atom...
-                #attachment_points.append(atom_counter+1) 
-                attch2dummy_map[atom_counter+1] = all_counter
+                attch2dummy_map[atom_counter] = all_counter
             # NOTE correcting for preceeding branches i.e., see previous atom...
             elif (ti > 0) and BR_CLOSE.fullmatch(tokens[ti-1]):
                 source_ti = _seek_source_atom(tokens, ti)
-                #attachment_points.append(token2atom_map[source_ti])
                 attch2dummy_map[token2atom_map[source_ti]] = all_counter
             # Otherwise it's the previous atom
             else:
-                #attachment_points.append(atom_counter-1)
                 attch2dummy_map[atom_counter-1] = all_counter
             all_counter += 1
 
@@ -580,7 +578,6 @@ def detect_existing_fragment(smiles, frag_smiles):
     return frag_indexes
 
 # ----- Useful functions for testing -----
-
 def smiles_eq(smi1, smi2):
     mol1 = Chem.MolFromSmiles(smi1)
     mol2 = Chem.MolFromSmiles(smi2)
