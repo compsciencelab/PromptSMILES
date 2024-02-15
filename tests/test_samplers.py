@@ -32,6 +32,10 @@ scaffold_params = [
         "c1c(Cl)c(F)c(F)cc1"
     ),
     (
+        "C(*)C1=C(*)C(*)N=C(c2nccs2)N1",
+        "C(F)C1=C(F)C(F)N=C(c2nccs2)N1"
+    ),
+    (
         "C(*)c1nc(*)n2[nH]c(-c3c(*)c(*)c(F)c(S(=O)(=O)N4C(*)C(*)N(*)C(*)C4(*))c3(*))nc(=O)c12",
         "C(F)c1nc(F)n2[nH]c(-c3c(F)c(F)c(F)c(S(=O)(=O)N4C(F)C(F)N(F)C(F)C4(F))c3(F))nc(=O)c12"
     ),
