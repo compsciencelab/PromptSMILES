@@ -22,19 +22,23 @@ class BaseSampler:
         # ---- Randomize ----
         at_idx = utils.correct_attachment_point(smiles, at_idx) # NOTE correcting attachment index to atom index
         rand_smiles = utils.randomize_smiles(smiles, n_rand=n_rand, random_type='restricted', rootAtom=at_idx, reverse=reverse)
-        if rand_smiles is None:
+        if rand_smiles:
+            # ---- Evaluate ----
+            try:
+                nlls = self.evaluate_fn([utils.strip_attachment_points(smi)[0] for smi in rand_smiles])
+                # ---- Sort ----
+                opt_smi, opt_nll = sorted(zip(rand_smiles, nlls), key=lambda x: x[1])[0]
+                return opt_smi, opt_nll
+
+            except KeyError:
+                # NOTE RDKit sometimes inserts a token that may not have been present in the vocabulary
+                logger.debug(f"SMILES evaluation failed for {smiles} at {at_idx}, rearranging instead...")
+                
+        else:
+            # NOTE RDKit sometimes creates duplicate ring indexes for different rings causing an error upon reversal
             logger.debug(f"SMILES randomization failed for {smiles} at {at_idx}, rearranging instead...")
-            return utils.root_smiles(smiles, at_idx, reverse=reverse), None
-        # ---- Evaluate ----
-        try:
-            nlls = self.evaluate_fn([utils.strip_attachment_points(smi)[0] for smi in rand_smiles])
-        except KeyError:
-            # NOTE RDKit sometimes inserts a token that may not have been present in the vocabulary
-            logger.debug(f"SMILES evaluation failed for {smiles} at {at_idx}, rearranging instead...")
-            return utils.root_smiles(smiles, at_idx, reverse=reverse), None
-        # ---- Sort ----
-        opt_smi, opt_nll = sorted(zip(rand_smiles, nlls), key=lambda x: x[1])[0]
-        return opt_smi, opt_nll
+
+        return utils.root_smiles(smiles, at_idx, reverse=reverse), None
 
 
 class DeNovo:
