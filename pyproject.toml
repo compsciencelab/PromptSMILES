@@ -1,3 +1,7 @@
+# Copyright Universitat Pompeu Fabra 2020-2023  https://www.compscience.org
+# Distributed under the Apache 2.0 License.
+# (See accompanying file README.md file or copy at https://opensource.org/license/apache-2-0/)
+
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
@@ -24,6 +28,6 @@ dependencies = [
   "rdkit>=2022" # Let's just take a relatively recent cut-off for RDKit
 ]
 
-# [project.urls]
-# Homepage = "https://github.com/pypa/sampleproject"
-# Issues = "https://github.com/pypa/sampleproject/issues"
+[project.urls]
+Homepage = "https://github.com/compsciencelab/PromptSMILES"
+Issues = "https://github.com/compsciencelab/PromptSMILES/issues"
