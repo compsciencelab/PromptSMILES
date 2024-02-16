@@ -197,9 +197,9 @@ def randomize_smiles(smi, n_rand=10, random_type="restricted", rootAtom=None, re
                 random_smiles = Chem.MolToSmiles(random_mol, canonical=False, isomericSmiles=True)
 
             if reverse:
-                rev_random_smiles = reverse_smiles(random_smiles)
+                random_smiles = reverse_smiles(random_smiles)
                 # NOTE sometimes RDKit assigns the same ring index to different rings, causing an error upon reversing, so let's try again in this case
-                #if smiles_eq(random_smiles, rev_random_smiles)[0]:
+                #if smiles_eq(random_smiles, rev_random_smiles)[0]: # NOTE this significantly slows things down
                 #    random_smiles = rev_random_smiles
                 #else:
                     # Keep trying until we find one without RDKit reusing ring indexes
