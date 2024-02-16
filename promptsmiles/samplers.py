@@ -43,7 +43,13 @@ class BaseSampler:
 
 
 class DeNovo:
-    def __init__(self, batch_size: int, sample_fn: Callable, **kwargs):
+    def __init__(
+        self,
+        batch_size: int,
+        sample_fn: Callable,
+        sample_fn_kwargs={},
+        **kwargs
+        ):
         """
         A de novo sampling class to generate molecules from scratch i.e., dummy wrap that just calls the sample_fn.
 
@@ -58,6 +64,7 @@ class DeNovo:
         """
         self.batch_size = batch_size
         self.sample_fn = sample_fn
+        self.sample_fn_kwargs = sample_fn_kwargs
 
     def sample(self, batch_size: int = None, **kwargs):
         """
@@ -67,7 +74,7 @@ class DeNovo:
         if not batch_size: batch_size = self.batch_size
         
         # Sample
-        results = self.sample_fn(batch_size=batch_size)
+        results = self.sample_fn(batch_size=batch_size, **self.sample_fn_kwargs)
         
         return results
 
@@ -78,6 +85,7 @@ class ScaffoldDecorator(BaseSampler):
         scaffold: str,
         batch_size: int,
         sample_fn: Callable,
+        sample_fn_kwargs: {},
         evaluate_fn: Callable,
         batch_prompts: bool = False,
         optimize_prompts: bool = True,
@@ -126,6 +134,7 @@ class ScaffoldDecorator(BaseSampler):
         self.batch_prompts = batch_prompts
         self.shuffle = shuffle
         self.sample_fn = sample_fn
+        self.sample_fn_kwargs = sample_fn_kwargs
         self.evaluate_fn = evaluate_fn
         self.return_all = return_all
         self.scaffold = scaffold
@@ -192,7 +201,7 @@ class ScaffoldDecorator(BaseSampler):
         batch_nlls = []
         while n_rem:
             prompt = variant.strip_smiles
-            smiles, nll = self.sample_fn(prompt=prompt, batch_size=1)
+            smiles, nll = self.sample_fn(prompt=prompt, batch_size=1, **self.sample_fn_kwargs)
             smiles, nll = smiles[0], nll[0]
             assert smiles.startswith(prompt), f"Sampled SMILES {smiles} does not start with prompt {prompt}, why not?"
             batch_smiles.append(smiles)
@@ -258,7 +267,7 @@ class ScaffoldDecorator(BaseSampler):
         while n_rem:
             # Sample based on initial prompt
             prompts = [v.strip_smiles for v in batch_variants]
-            smiles, nlls = self.sample_fn(prompt=prompts, batch_size=batch_size)
+            smiles, nlls = self.sample_fn(prompt=prompts, batch_size=batch_size, **self.sample_fn_kwargs)
             batch_smiles.append(smiles)
             batch_nlls.append(nlls)
             n_rem -= 1
@@ -340,6 +349,7 @@ class FragmentLinker(BaseSampler):
         fragments: list,
         batch_size: int,
         sample_fn: Callable,
+        sample_fn_kwargs: {},
         evaluate_fn: Callable,
         batch_prompts: bool = False,
         optimize_prompts: bool = True,
@@ -391,6 +401,7 @@ class FragmentLinker(BaseSampler):
         self.scan = scan
         self.detect_existing = detect_existing
         self.sample_fn = sample_fn
+        self.sample_fn_kwargs = sample_fn_kwargs
         self.evaluate_fn = evaluate_fn
         self.return_all = return_all
         self.fragment = namedtuple('fragment', ['for_smiles', 'for_nll', 'rev_smiles', 'rev_nll'])
@@ -447,7 +458,7 @@ class FragmentLinker(BaseSampler):
         prompt = f0.rev_smiles
         prompt_tokens = self.tokenizer.tokenize(prompt, with_begin_and_end=False)
         frag_indexes = list(range(len(prompt_tokens)))
-        smiles, nll = self.sample_fn(prompt=prompt, batch_size=1)
+        smiles, nll = self.sample_fn(prompt=prompt, batch_size=1, **self.sample_fn_kwargs)
         smiles, nll = smiles[0], nll[0]
         assert smiles.startswith(prompt), f"Sampled SMILES {smiles} does not start with prompt {prompt}, why not?"
         smiles_tokens = self.tokenizer.tokenize(smiles, with_begin_and_end=False)
@@ -558,7 +569,7 @@ class FragmentLinker(BaseSampler):
         n_rem = self.n_fgs
         batch_smiles = []
         batch_nlls = []
-        smiles, nlls = self.sample_fn(prompt=prompts, batch_size=batch_size)
+        smiles, nlls = self.sample_fn(prompt=prompts, batch_size=batch_size, **self.sample_fn_kwargs)
         batch_smiles.append(smiles)
         batch_nlls.append(nlls)
         n_rem -= 1
