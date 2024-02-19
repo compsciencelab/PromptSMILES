@@ -331,33 +331,6 @@ def _check_ring_numbers(smiles, debug=False):
     logger.warning(f"Re-indexed SMILES rings from {smiles} -> {new_smiles}")
     return new_smiles
 
-def correct_fragment_ring_numbers(smi1: str, smi2: str) -> str:
-    """Given the rings in smi1, reindex the rings in smi2"""
-    # Count rings in smi1
-    ring_count = 0
-    for c in split_by_regex(smi1, [SQUARE_BRACKET, BRCL, DOUBLE_RING, SINGLE_RING]):
-        # Check for number
-        if SINGLE_RING.fullmatch(c) or DOUBLE_RING.fullmatch(c):
-            # Count max ring index
-            ring_count = max(ring_count, int(c))
-    
-    # Reindex smi2
-    ring_map = {}
-    #square_brackets = False
-    new_smi2 = []
-    for c in split_by_regex(smi2, [SQUARE_BRACKET, BRCL, DOUBLE_RING, SINGLE_RING]):
-        # Check for number
-        if SINGLE_RING.fullmatch(c) or DOUBLE_RING.fullmatch(c):
-            # Add new ring to map
-            if c not in ring_map.keys():
-                ring_map[c] = int2ring_number(ring_count)
-                ring_count += 1
-            # Update c
-            c = ring_map[c]
-        # Add token
-        new_smi2.append(c)
-    return "".join(new_smi2)
-
 def _seek_parenthesis(smiles_or_tokens):
     """
     Return the indices of top level parenthesis only as a dict map
@@ -559,6 +532,33 @@ def _smiles2smarts(smiles):
     smarts = Chem.MolToSmarts(mol2)
     smarts = smarts.replace("[#0]", "[*]")
     return smarts
+
+def correct_fragment_ring_numbers(smi1: str, smi2: str) -> str:
+    """Given the rings in smi1, reindex the rings in smi2"""
+    # Count rings in smi1
+    ring_count = 0
+    for c in split_by_regex(smi1, [SQUARE_BRACKET, BRCL, DOUBLE_RING, SINGLE_RING]):
+        # Check for number
+        if SINGLE_RING.fullmatch(c) or DOUBLE_RING.fullmatch(c):
+            # Count max ring index
+            ring_count = max(ring_count, int(c))
+    
+    # Reindex smi2
+    ring_map = {}
+    ring_count += 1 # Start from next index
+    new_smi2 = []
+    for c in split_by_regex(smi2, [SQUARE_BRACKET, BRCL, DOUBLE_RING, SINGLE_RING]):
+        # Check for number
+        if SINGLE_RING.fullmatch(c) or DOUBLE_RING.fullmatch(c):
+            # Add new ring to map
+            if c not in ring_map.keys():
+                ring_map[c] = int2ring_number(ring_count)
+                ring_count += 1
+            # Update c
+            c = ring_map[c]
+        # Add token
+        new_smi2.append(c)
+    return "".join(new_smi2)
 
 def detect_existing_fragment(smiles, frag_smiles):
     """Get substructure match for frag smiles (with attachment index first)"""
