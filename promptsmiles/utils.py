@@ -353,7 +353,7 @@ def _check_ring_numbers(smiles, debug=False, v=False):
             new_tokens.append(t)
     if v: print(ring_map)
     new_smiles = "".join(new_tokens)
-    logger.warning(f"Re-indexed SMILES rings from {smiles} -> {new_smiles}")
+    logger.debug(f"Re-indexed SMILES rings from {smiles} -> {new_smiles}")
     return new_smiles
 
 def _seek_parenthesis(smiles_or_tokens):
