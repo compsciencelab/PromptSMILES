@@ -32,23 +32,26 @@ if not TEST_SCAFFOLD:
         TEST_SCAFFOLD.extend([smi.strip() for smi in f.readlines()])
 
 
-# --------------------- Broad tests ------------------------
+# --------------------- SMILES tests ------------------------
 @pytest.mark.parametrize("smiles", TEST_SMILES)
 def test_reverse(smiles):
     """Make an assumption that if we reverse a SMILES string twice, we get the same thing back."""
     rsmiles = utils.reverse_smiles(smiles, renumber_rings=False)
+    eq, err = utils.smiles_eq(smiles, rsmiles)
+    assert eq, "Reverse SMILES are not chemically equivalent"
     nsmiles = utils.reverse_smiles(rsmiles, renumber_rings=False)
-    assert utils.smiles_eq(smiles, nsmiles)[0], "SMILES are not chemically equivalent"
-    assert nsmiles == smiles, "SMILES chemically equivalent but not exactly the same"
+    assert utils.smiles_eq(smiles, nsmiles)[0], "Double reverse SMILES are not chemically equivalent"
+    assert nsmiles == smiles, "Double reverse SMILES are not exactly the same"
 
-@pytest.mark.skip(reason="This is not implemented anywhere as it fails")
 @pytest.mark.parametrize("smiles", TEST_SMILES)
 def test_ring_numbers(smiles):
     """Check to see that we can safely reindex ring numbers by chronological opening order... this fixes an RDKit Error."""
     csmiles = utils._check_ring_numbers(smiles)
     eq, err = utils.smiles_eq(smiles, csmiles)
-    assert eq, f"\nInput {i}: {smiles}\nError: {err}"
+    assert eq, "SMILES with corrected ring numbers is not equivalent"
 
+
+# --------------------- Scaffold tests ----------------------
 @pytest.mark.parametrize("scaffold", TEST_SCAFFOLD)
 def test_attachment_points(scaffold):
     """If we get extract attachment points, and put them back in, we should get the same thing back."""
@@ -59,8 +62,19 @@ def test_attachment_points(scaffold):
     assert scaffold == recycled_smiles # Check if the are the exact same arrangement
 
 @pytest.mark.parametrize("scaffold", TEST_SCAFFOLD)
+def test_root(scaffold):
+    """If we pick every attachment point, randomize it and reverse it, we should get the same molecule back and an attachment point should be on the end."""
+    at_pts = utils.get_attachment_points(scaffold)
+    for at_pt in at_pts:
+        c_pt = utils.correct_attachment_point(scaffold, at_pt)
+        rev_rand_smi = utils.root_smiles(scaffold, rootAtom=c_pt, reverse=True)
+        eq, error = utils.smiles_eq(utils.strip_attachment_points(scaffold)[0], utils.strip_attachment_points(rev_rand_smi)[0])
+        assert eq, error
+        assert rev_rand_smi.endswith("(*)"), f"Attachment point not at the end of the molecule: {rev_rand_smi}"
+
+@pytest.mark.parametrize("scaffold", TEST_SCAFFOLD)
 def test_randomize(scaffold):
-    """If we pick every attachment point, randomize it and reverse it, we should get the same molecule back."""
+    """If we pick every attachment point, randomize it and reverse it, we should get the same molecule back and an attachment point should be on the end."""
     at_pts = utils.get_attachment_points(scaffold)
     for at_pt in at_pts:
         c_pt = utils.correct_attachment_point(scaffold, at_pt)
@@ -68,6 +82,7 @@ def test_randomize(scaffold):
         for rev_rand_smi in rev_rand_smiles:
             eq, error = utils.smiles_eq(utils.strip_attachment_points(scaffold)[0], utils.strip_attachment_points(rev_rand_smi)[0])
             assert eq, error
+            assert rev_rand_smi.endswith("(*)"), f"Attachment point not at the end of the molecule: {rev_rand_smi}"
 
 
 # --------------------- Specific tests ---------------------
