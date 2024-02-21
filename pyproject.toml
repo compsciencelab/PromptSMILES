@@ -11,7 +11,7 @@ exclude = ["images*", "tests*"]
 
 [project]
 name = "promptsmiles"
-version = "1.0"
+version = "1.2"
 authors = [
   { name="Morgan Thomas", email="morganthomas263@gmail.com" },
 ]
@@ -19,11 +19,11 @@ description = "A conveniant package to manipulate SMILES strings for iterative p
 readme = "README.md"
 license = {file = "LICENSE"}
 requires-python = ">=3.7"
-# classifiers = [
-#    "Programming Language :: Python :: 3",
-#    "License :: OSI Approved :: MIT License",
-#    "Operating System :: OS Independent",
-# ]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
 dependencies = [
   "rdkit>=2022" # Let's just take a relatively recent cut-off for RDKit
 ]
