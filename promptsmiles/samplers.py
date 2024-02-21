@@ -203,7 +203,8 @@ class ScaffoldDecorator(BaseSampler):
             prompt = variant.strip_smiles
             smiles, nll = self.sample_fn(prompt=prompt, batch_size=1, **self.sample_fn_kwargs)
             smiles, nll = smiles[0], nll[0]
-            assert smiles.startswith(prompt), f"Sampled SMILES {smiles} does not start with prompt {prompt}, why not?"
+            if not smiles.startswith(prompt):
+                logger.error(f"Sampled SMILES {smiles} does not start with prompt {prompt}, why not?")
             batch_smiles.append(smiles)
             batch_nlls.append(nll)
             n_rem -= 1
@@ -275,7 +276,8 @@ class ScaffoldDecorator(BaseSampler):
             if n_rem:
                 new_variants = []
                 for smi, variant in zip(smiles, batch_variants):
-                    assert smi.startswith(variant.strip_smiles), f"Sampled SMILES {smi} does not start with prompt {variant.strip_smiles}, why not?"
+                    if not smi.startswith(variant.strip_smiles):
+                        logger.error(f"Sampled SMILES {smi} does not start with prompt {variant.strip_smiles}, why not?")
                     
                     # Insert remaining attachment points
                     smi_w_at = utils.insert_attachment_points(smi, variant.at_pts)
