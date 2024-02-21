@@ -496,22 +496,26 @@ class FragmentLinker(BaseSampler):
                 fi_smi = utils.correct_fragment_ring_numbers(smiles, fi.for_smiles)
                 # Insert fragment at different positions
                 temp_smiles = []
-                for i in range(max(frag_indexes), len(smiles_tokens)):
-                    if i == len(smiles_tokens)-1: 
-                        tsmi = smiles + "(" + fi_smi + ")"
-                    elif i in frag_indexes: 
+                for i in range(len(prompt_tokens)-1, len(smiles_tokens)):
+                    if i in frag_indexes: 
                         continue 
                     else: 
                         # NOTE operate in token space to reduce errors
                         tsmi = "".join(smiles_tokens[:i+1] + ["("] + [fi_smi] + [")"] + smiles_tokens[i+1:])
-                    tidx = list(range(i+1, i+len(fi_smi)+2))
-                    temp_smiles.append((tsmi, tidx))
-                temp_nlls = self.evaluate_fn([smi for smi, _ in temp_smiles])
-                # Select best position
-                (smiles, fidxs), nll = sorted(zip(temp_smiles, temp_nlls), key=lambda x: x[1])[0]
-                batch_smiles.append(smiles)
-                batch_nlls.append(nll)
-                frag_indexes.extend(fidxs)
+                        tidx = list(range(i+1, i+len(fi_smi)+2))
+                        temp_smiles.append((tsmi, tidx))
+                if temp_smiles:
+                    # Select best position
+                    temp_nlls = self.evaluate_fn([smi for smi, _ in temp_smiles])
+                    (smiles, fidxs), nll = sorted(zip(temp_smiles, temp_nlls), key=lambda x: x[1])[0]
+                    smiles_tokens = self.tokenizer.tokenize(smiles, with_begin_and_end=False)
+                    batch_smiles.append(smiles)
+                    batch_nlls.append(nll)
+                    frag_indexes.extend(fidxs)
+                else:
+                    # Don't add fragment
+                    batch_smiles.append(smiles)
+                    batch_nlls.append(nll)
                 n_rem -= 1
         else:
             fi = fragments.pop(0)
@@ -609,23 +613,26 @@ class FragmentLinker(BaseSampler):
                     fi_smi = utils.correct_fragment_ring_numbers(smiles, fi.for_smiles)
                     # Insert fragment at different positions
                     smiles_tokens = self.tokenizer.tokenize(smiles, with_begin_and_end=False)
+                    prompt_tokens = self.tokenizer.tokenize(prompts[bi], with_begin_and_end=False)
                     temp_smiles = []
-                    for i in range(max(existing_indexes), len(smiles_tokens)):
-                        if i == len(smiles_tokens)-1: 
-                            tsmi = smiles + "(" + fi_smi + ")"
-                        elif i in existing_indexes: 
+                    for i in range(len(prompt_tokens)-1, len(smiles_tokens)):
+                        if i in existing_indexes: 
                             continue 
                         else: 
                             tsmi = "".join(smiles_tokens[:i+1] + ["("] + [fi_smi] + [")"] + smiles_tokens[i+1:])
-                        tidx = list(range(i+1, i+len(fi_smi)+2))
-                        temp_smiles.append((tsmi, tidx))
-                    # Evaluate
-                    temp_nlls = self.evaluate_fn([smi for smi, _ in temp_smiles])
-                    # Select best
-                    (smiles, fidxs), nll = sorted(zip(temp_smiles, temp_nlls), key=lambda x: x[1])[0]
-                    n_smiles.append(smiles)
-                    n_nlls.append(nll)
-                    frag_indexes[bi].extend(fidxs)
+                            tidx = list(range(i+1, i+len(fi_smi)+2))
+                            temp_smiles.append((tsmi, tidx))
+                    if temp_smiles:
+                        # Select best position
+                        temp_nlls = self.evaluate_fn([smi for smi, _ in temp_smiles])
+                        (smiles, fidxs), nll = sorted(zip(temp_smiles, temp_nlls), key=lambda x: x[1])[0]
+                        n_smiles.append(smiles)
+                        n_nlls.append(nll)
+                        frag_indexes[bi].extend(fidxs)
+                    else:
+                        # Don't add fragment
+                        n_smiles.append(smiles)
+                        n_nlls.append(nll)
                 batch_smiles.append(n_smiles)
                 batch_nlls.append(n_nlls)
                 n_rem -= 1
