@@ -135,9 +135,10 @@ def root_smiles(smi, rootAtom=None, reverse=False):
     if mol:
         new_smi = Chem.MolToSmiles(mol, rootedAtAtom=rootAtom)
         if reverse:
-            new_smi = reverse_smiles(new_smi)
+            # NOTE sometimes RDKit assigns the same ring index to different rings, causing an error upon reversing, so let's re-index if necessary
             try: new_smi = _check_ring_numbers(new_smi)
             except Exception as e: logger.error(e); pass
+            new_smi = reverse_smiles(new_smi)
         # Convert back to (*)
         new_smi = bracket_attachments(new_smi)
     return new_smi
@@ -201,15 +202,10 @@ def randomize_smiles(smi, n_rand=10, random_type="restricted", rootAtom=None, re
                 random_smiles = Chem.MolToSmiles(random_mol, canonical=False, isomericSmiles=True)
 
             if reverse:
+                # NOTE sometimes RDKit assigns the same ring index to different rings, causing an error upon reversing, so let's re-index if necessary
                 try: random_smiles = _check_ring_numbers(random_smiles)
                 except Exception as e: logger.error(e); pass
                 random_smiles = reverse_smiles(random_smiles)
-                # NOTE sometimes RDKit assigns the same ring index to different rings, causing an error upon reversing, so let's try again in this case
-                #if smiles_eq(random_smiles, rev_random_smiles)[0]: # NOTE this significantly slows things down
-                #    random_smiles = rev_random_smiles
-                #else:
-                    # Keep trying until we find one without RDKit reusing ring indexes
-                #    continue
 
             # Convert back to (*)
             random_smiles = bracket_attachments(random_smiles)
@@ -299,7 +295,7 @@ def _check_ring_numbers(smiles, debug=False, v=False):
 
     ring_count = 0
     atom_count = -1 # Counting what the last atom was
-    ring_map = [] # [[old_ring_id, new_ring_id, ring, closed]]
+    ring_map = {} # {old_ring -> new_ring}
     new_tokens = []
     for i, t in enumerate(tokens):
         # If it's a ring token -> update
@@ -307,43 +303,16 @@ def _check_ring_numbers(smiles, debug=False, v=False):
             if debug: import pdb; pdb.set_trace()
             mapped = False
             # Check to see if it's already mapped
-            if any([t == old_ring_id for old_ring_id, _, _, _ in ring_map]):
-                for mi, (old_ring_id, new_ring_id, ring, closed) in enumerate(reversed(ring_map)):
-                    if (t == old_ring_id) and (atom_count in ring) and (not closed):
-                        new_tokens.append(new_ring_id)
-                        ring_map[-(mi+1)][3] = True
-                        mapped = True
-                        if v: print(f"Relabelled {t} -> {new_ring_id} at atom {atom_count}")
-                        break
-            # New indexes
-            if not any([t == old_ring_id for old_ring_id, _, _, _ in ring_map]) or not mapped:
+            if t in ring_map.keys():
+                new_tokens.append(ring_map[t])
+                if v: print(f"Relabelled {t} -> {ring_map[t]} at atom {atom_count}")
+                ring_map.pop(t)
+            else:
+                # Add it
                 ring_count += 1
-                ring_membership = [ri for ri, ring in enumerate(rings) if atom_count in ring]
-                # Look forward to see what atom next closes this ring...
-                if len(ring_membership) > 1:
-                    tmp_count = atom_count
-                    tmp_i = i+1
-                    while True:
-                        tmp_t = tokens[tmp_i]
-                        # If is ring label, get ring with this atom in too
-                        if (tmp_t == t):
-                            for ri in ring_membership:
-                                if tmp_count in rings[ri]:
-                                    ring = rings.pop(ri)
-                                    break
-                            break
-                        # If atom count it
-                        elif any([regex.fullmatch(tmp_t) for regex in [SQUARE_BRACKET_noH, BRCL, ATOM, BR_ATTCH, ATTCH]]):
-                            tmp_count += 1
-                        else:
-                            pass
-                        tmp_i += 1
-                else:
-                    ring = rings.pop(ring_membership[0])
-                # Update
                 new_ring_id = int2ring_number(ring_count)
+                ring_map[t] = new_ring_id
                 new_tokens.append(new_ring_id)
-                ring_map.append([t, new_ring_id, ring, False])
                 if v: print(f"Relabelled {t} -> {new_ring_id} at atom {atom_count}")
         # If it's an atom -> count
         elif any([regex.fullmatch(t) for regex in [SQUARE_BRACKET_noH, BRCL, ATOM, BR_ATTCH, ATTCH]]):
@@ -353,7 +322,7 @@ def _check_ring_numbers(smiles, debug=False, v=False):
             new_tokens.append(t)
     if v: print(ring_map)
     new_smiles = "".join(new_tokens)
-    logger.debug(f"Re-indexed SMILES rings from {smiles} -> {new_smiles}")
+    logger.warning(f"Re-indexed SMILES rings from {smiles} -> {new_smiles}")
     return new_smiles
 
 def _seek_parenthesis(smiles_or_tokens):
