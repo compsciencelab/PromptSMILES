@@ -315,7 +315,7 @@ class ScaffoldDecorator(BaseSampler):
                             )
                     else:
                         logger.debug(f"SMILES optimization failed for {smi}, reverting to previous prompt.")
-                        # Skip position (variant.strip_smiles = previous_prompt)
+                        # Skip position (variant.strip_smiles = previous_)
                         smi_w_at = utils.insert_attachment_points(variant.strip_smiles, variant.at_pts)
                         opt_smi, opt_nll = self.rearrange_prompt(smi_w_at, sel_pt, reverse=True)
                         if opt_smi:
@@ -331,7 +331,7 @@ class ScaffoldDecorator(BaseSampler):
                                 )
                             )
                         else:
-                            ug(f"SMILES optimization failed for {smi}, stopping here.")
+                            logger.debug(f"SMILES optimization failed for {smi}, stopping here.")
                             # Stop here
                             new_variants.append(
                                 self.variant(
