@@ -221,7 +221,6 @@ class ScaffoldDecorator(BaseSampler):
                 if opt_smi:
                     strip_smi, rem_pts = utils.strip_attachment_points(opt_smi)
                     rem_pts.pop(-1) # remove the last one
-                    # Update variant
                     variant = self.variant(
                         orig_smiles=smi_w_at,
                         opt_smiles=opt_smi,
@@ -230,16 +229,30 @@ class ScaffoldDecorator(BaseSampler):
                         nll=opt_nll
                         )
                 else:
-                    logger.debug(f"SMILES optimization failed for {smiles}, stopping here.")
-                    # Update variant
-                    variant = self.variant(
-                        orig_smiles=smi_w_at,
-                        opt_smiles=smiles,
-                        strip_smiles=smiles,
-                        at_pts=deepcopy(variant.at_pts),
-                        nll=None
-                        )
-
+                    logger.debug(f"SMILES optimization failed for {smiles}, reverting to previous prompt.")
+                    # Skip position
+                    smi_w_at = utils.insert_attachment_points(prompt, variant.at_pts)
+                    opt_smi, opt_nll = self.rearrange_prompt(smi_w_at, sel_pt, reverse=True)
+                    if opt_smi:
+                        strip_smi, rem_pts = utils.strip_attachment_points(opt_smi)
+                        rem_pts.pop(-1)
+                        variant = self.variant(
+                            orig_smiles=smi_w_at,
+                            opt_smiles=opt_smi,
+                            strip_smiles=strip_smi,
+                            at_pts=rem_pts,
+                            nll=opt_nll
+                            )
+                    else:
+                        logger.debug(f"SMILES optimization failed for {smiles}, stopping here.")
+                        # Stop here
+                        variant = self.variant(
+                            orig_smiles=smi_w_at,
+                            opt_smiles=smiles,
+                            strip_smiles=smiles,
+                            at_pts=deepcopy(variant.at_pts),
+                            nll=None
+                            )
 
         if return_all:
             return batch_smiles, batch_nlls
@@ -301,16 +314,34 @@ class ScaffoldDecorator(BaseSampler):
                                 )
                             )
                     else:
-                        logger.debug(f"SMILES optimization failed for {smi}, stopping here.")
-                        new_variants.append(
-                            self.variant(
-                                orig_smiles=smi_w_at,
-                                opt_smiles=smi,
-                                strip_smiles=smi,
-                                at_pts=deepcopy(variant.at_pts),
-                                nll=None
+                        logger.debug(f"SMILES optimization failed for {smi}, reverting to previous prompt.")
+                        # Skip position (variant.strip_smiles = previous_prompt)
+                        smi_w_at = utils.insert_attachment_points(variant.strip_smiles, variant.at_pts)
+                        opt_smi, opt_nll = self.rearrange_prompt(smi_w_at, sel_pt, reverse=True)
+                        if opt_smi:
+                            strip_smi, rem_pts = utils.strip_attachment_points(opt_smi)
+                            rem_pts.pop(-1)
+                            new_variants.append(
+                                self.variant(
+                                    orig_smiles=smi_w_at,
+                                    opt_smiles=opt_smi,
+                                    strip_smiles=strip_smi,
+                                    at_pts=rem_pts,
+                                    nll=opt_nll
                                 )
                             )
+                        else:
+                            ug(f"SMILES optimization failed for {smi}, stopping here.")
+                            # Stop here
+                            new_variants.append(
+                                self.variant(
+                                    orig_smiles=smi_w_at,
+                                    opt_smiles=smi,
+                                    strip_smiles=smi,
+                                    at_pts=deepcopy(variant.at_pts),
+                                    nll=None
+                                    )
+                                )
                 batch_variants = new_variants
 
         if return_all:
