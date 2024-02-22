@@ -1,4 +1,4 @@
-# PromptSMILES: Simple scaffold decoration and fragment linking for chemical language models
+# PromptSMILES: Prompting for scaffold decoration and fragment linking in chemical language models
 
 This library contains code to manipulate SMILES strings to facilitate iterative prompting to be coupled with a trained chemical language model (CLM) that uses SMILES notation.
 
