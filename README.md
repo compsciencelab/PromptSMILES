@@ -9,7 +9,7 @@ pip install promptsmiles
 ```
 Or via obtaining a copy of this repo, promptsmiles requires RDKit.
 ```
-git clone https://github.com/MorganCThomas/PromptSMILES.git
+git clone https://github.com/compsciencelab/PromptSMILES.git
 cd PromptSMILES
 pip install ./
 ```
