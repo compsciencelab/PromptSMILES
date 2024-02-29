@@ -27,6 +27,7 @@ SD = ScaffoldDecorator(
     sample_fn=CLM.sampler,
     evaluate_fn=CLM.evaluater,
     batch_prompts=False, # CLM.sampler accepts a list of prompts or not
+    optimize_prompts=True,
     shuffle=True, # Randomly select attachment points within a batch or not
     return_all=False,
     )
@@ -41,7 +42,8 @@ FL = FragmentLinker(
     batch_size=64,
     sample_fn=CLM.sampler,
     evaluate_fn=CLM.evaluater,
-    batch_prompts=False, 
+    batch_prompts=False,
+    optimize_prompts=True,
     shuffle=True, 
     scan=False, # Optional when combining 2 fragments, otherwise is set to true
     return_all=False,
@@ -56,10 +58,10 @@ Notice the callable functions required CLM.sampler and CLM.evaluater. The first 
 def CLM_sampler(prompt: Union[str, list[str]], batch_size: int):
     """
     Input: Must have a prompt and batch_size argument.
-    Output: SMILES [list], NLLs Union[list, np.array, torch.tensor](CPU w.o. gradient)
+    Output: SMILES [list]
     """
     # Encode prompt and sample as per model implementation
-    return smiles, nlls
+    return smiles
 ```
 **Note**: For a more efficient implementation, prompt should accept a list of prompts equal to batch_size and `batch_prompts` should be set to `True` in the promptsmiles class used.
 

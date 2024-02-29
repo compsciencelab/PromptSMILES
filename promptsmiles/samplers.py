@@ -198,15 +198,13 @@ class ScaffoldDecorator(BaseSampler):
         # Sample
         n_rem = self.n_pts
         batch_smiles = []
-        batch_nlls = []
         while n_rem:
             prompt = variant.strip_smiles
-            smiles, nll = self.sample_fn(prompt=prompt, batch_size=1, **self.sample_fn_kwargs)
-            smiles, nll = smiles[0], nll[0]
+            smiles = self.sample_fn(prompt=prompt, batch_size=1, **self.sample_fn_kwargs)
+            smiles = smiles[0]
             if not smiles.startswith(prompt):
                 logger.error(f"Sampled SMILES {smiles} does not start with prompt {prompt}, why not?")
             batch_smiles.append(smiles)
-            batch_nlls.append(nll)
             n_rem -= 1
 
             if n_rem:
@@ -255,9 +253,9 @@ class ScaffoldDecorator(BaseSampler):
                             )
 
         if return_all:
-            return batch_smiles, batch_nlls
+            return batch_smiles
         else:
-            return batch_smiles[-1], batch_nlls[-1]
+            return batch_smiles[-1]
     
     def _batch_sample(self, batch_size: int = None, shuffle: bool = None, return_all: bool = None):
         """More efficient sampling assuming the sample_fn can accept a batch of prompts"""
@@ -277,13 +275,11 @@ class ScaffoldDecorator(BaseSampler):
         # Sample
         n_rem = self.n_pts
         batch_smiles = []
-        batch_nlls = []
         while n_rem:
             # Sample based on initial prompt
             prompts = [v.strip_smiles for v in batch_variants]
-            smiles, nlls = self.sample_fn(prompt=prompts, batch_size=batch_size, **self.sample_fn_kwargs)
+            smiles = self.sample_fn(prompt=prompts, batch_size=batch_size, **self.sample_fn_kwargs)
             batch_smiles.append(smiles)
-            batch_nlls.append(nlls)
             n_rem -= 1
 
             if n_rem:
@@ -345,9 +341,9 @@ class ScaffoldDecorator(BaseSampler):
                 batch_variants = new_variants
 
         if return_all:
-            return batch_smiles, batch_nlls
+            return batch_smiles
         else:
-            return batch_smiles[-1], batch_nlls[-1]
+            return batch_smiles[-1]
 
     def sample(self, batch_size: int = None, batch_prompts: bool = None, return_all: bool = None, shuffle: bool = None):
         """
@@ -364,16 +360,13 @@ class ScaffoldDecorator(BaseSampler):
             return self._batch_sample(batch_size=batch_size, shuffle=shuffle, return_all=return_all)
         else:
             batch_smiles = []
-            batch_nlls = []
             for i in range(batch_size):
-                smiles, nlls = self._single_sample(shuffle=shuffle, return_all=return_all)
+                smiles = self._single_sample(shuffle=shuffle, return_all=return_all)
                 batch_smiles.append(smiles)
-                batch_nlls.append(nlls)
             # Reformat to be the same as batch_prompts
             if return_all:
                 batch_smiles = list(map(list, zip(*batch_smiles)))
-                batch_nlls = list(map(list, zip(*batch_nlls)))
-            return batch_smiles, batch_nlls
+            return batch_smiles
 
 
 class FragmentLinker(BaseSampler):
@@ -487,16 +480,14 @@ class FragmentLinker(BaseSampler):
         # Sample
         n_rem = self.n_fgs
         batch_smiles = []
-        batch_nlls = []
         prompt = f0.rev_smiles
         prompt_tokens = self.tokenizer.tokenize(prompt, with_begin_and_end=False)
         frag_indexes = list(range(len(prompt_tokens)))
-        smiles, nll = self.sample_fn(prompt=prompt, batch_size=1, **self.sample_fn_kwargs)
-        smiles, nll = smiles[0], nll[0]
+        smiles = self.sample_fn(prompt=prompt, batch_size=1, **self.sample_fn_kwargs)
+        smiles = smiles[0]
         assert smiles.startswith(prompt), f"Sampled SMILES {smiles} does not start with prompt {prompt}, why not?"
         smiles_tokens = self.tokenizer.tokenize(smiles, with_begin_and_end=False)
         batch_smiles.append(smiles)
-        batch_nlls.append(nll)
         n_rem -= 1
         
         if self.scan:
@@ -517,7 +508,6 @@ class FragmentLinker(BaseSampler):
                             # If so, insert fragment indexes, append etc.
                             frag_indexes.extend([atom_map[aidx] for aidx in match])
                             batch_smiles.append(smiles)
-                            batch_nlls.append(nll)
                             n_rem -= 1
                             exists = True
                             break
@@ -541,12 +531,10 @@ class FragmentLinker(BaseSampler):
                     (smiles, fidxs), nll = sorted(zip(temp_smiles, temp_nlls), key=lambda x: x[1])[0]
                     smiles_tokens = self.tokenizer.tokenize(smiles, with_begin_and_end=False)
                     batch_smiles.append(smiles)
-                    batch_nlls.append(nll)
                     frag_indexes.extend(fidxs)
                 else:
                     # Don't add fragment
                     batch_smiles.append(smiles)
-                    batch_nlls.append(nll)
                 n_rem -= 1
         else:
             fi = fragments.pop(0)
@@ -561,7 +549,6 @@ class FragmentLinker(BaseSampler):
                     if (not any([atom_map[aidx] in frag_indexes for aidx in match])):
                         # If so, insert fragment indexes, append etc.
                         batch_smiles.append(smiles)
-                        batch_nlls.append(nll)
                         n_rem -= 1
                         exists = True
                         break
@@ -573,13 +560,12 @@ class FragmentLinker(BaseSampler):
                 # Evaluate
                 nll = self.evaluate_fn([smiles])[0]
                 batch_smiles.append(smiles)
-                batch_nlls.append(nll)
                 n_rem -= 1
 
         if return_all:
-            return batch_smiles, batch_nlls
+            return batch_smiles
         else:
-            return batch_smiles[-1], batch_nlls[-1]
+            return batch_smiles[-1]
 
     def _batch_sample(self, batch_size: int = None, shuffle: bool = None, scan: bool = None, detect_existing: bool = None, return_all: bool = None):
         """More efficient sampling assuming the sample_fn can accept a batch of prompts"""
@@ -605,18 +591,15 @@ class FragmentLinker(BaseSampler):
         # Sample
         n_rem = self.n_fgs
         batch_smiles = []
-        batch_nlls = []
-        smiles, nlls = self.sample_fn(prompt=prompts, batch_size=batch_size, **self.sample_fn_kwargs)
+        smiles = self.sample_fn(prompt=prompts, batch_size=batch_size, **self.sample_fn_kwargs)
         batch_smiles.append(smiles)
-        batch_nlls.append(nlls)
         n_rem -= 1
 
         if self.scan:
             while n_rem:
                 n_smiles = []
-                n_nlls = []
                 n_idxs = []
-                for bi, (smiles, nll, fragments, existing_indexes) in enumerate(zip(batch_smiles[-1], batch_nlls[-1], batch_fragments, frag_indexes)):
+                for bi, (smiles, fragments, existing_indexes) in enumerate(zip(batch_smiles[-1], batch_fragments, frag_indexes)):
                     assert smiles.startswith(prompts[bi]), f"Sampled SMILES {smiles} does not start with prompt {prompts[bi]}, why not?"
                     # Select another fragment
                     if shuffle: i = random.randint(0, n_rem-1)
@@ -635,7 +618,6 @@ class FragmentLinker(BaseSampler):
                                 # If so, insert fragment indexes, append etc.
                                 frag_indexes[bi].extend([atom_map[aidx] for aidx in match])
                                 n_smiles.append(smiles)
-                                n_nlls.append(nll)
                                 exists = True
                                 break
                         if exists:
@@ -658,14 +640,11 @@ class FragmentLinker(BaseSampler):
                         temp_nlls = self.evaluate_fn([smi for smi, _ in temp_smiles])
                         (smiles, fidxs), nll = sorted(zip(temp_smiles, temp_nlls), key=lambda x: x[1])[0]
                         n_smiles.append(smiles)
-                        n_nlls.append(nll)
                         frag_indexes[bi].extend(fidxs)
                     else:
                         # Don't add fragment
                         n_smiles.append(smiles)
-                        n_nlls.append(nll)
                 batch_smiles.append(n_smiles)
-                batch_nlls.append(n_nlls)
                 n_rem -= 1
         else:
             concat_smiles = []
@@ -694,13 +673,12 @@ class FragmentLinker(BaseSampler):
                     concat_smiles.append(smiles)
             # Evaluate
             batch_smiles.append(concat_smiles)
-            batch_nlls.append(self.evaluate_fn(concat_smiles))
             n_rem -= 1
 
         if return_all:
-            return batch_smiles, batch_nlls
+            return batch_smiles
         else:
-            return batch_smiles[-1], batch_nlls[-1]
+            return batch_smiles[-1]
 
     def sample(self, batch_size: int = None, batch_prompts: bool = None, return_all: bool = None, shuffle: bool = None, scan: bool = None, **kwargs):
         """
@@ -722,13 +700,10 @@ class FragmentLinker(BaseSampler):
             return self._batch_sample(batch_size=batch_size, shuffle=shuffle, return_all=return_all)
         else:
             batch_smiles = []
-            batch_nlls = []
             for i in range(batch_size):
-                smiles, nlls = self._single_sample(shuffle=shuffle, return_all=return_all)
+                smiles = self._single_sample(shuffle=shuffle, return_all=return_all)
                 batch_smiles.append(smiles)
-                batch_nlls.append(nlls)
             # Reformat to be the same as batch_prompts
             if return_all:
                 batch_smiles = list(map(list, zip(*batch_smiles)))
-                batch_nlls = list(map(list, zip(*batch_nlls)))
-            return batch_smiles, batch_nlls
+            return batch_smiles

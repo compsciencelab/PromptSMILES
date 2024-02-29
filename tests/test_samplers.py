@@ -13,33 +13,33 @@ def sample_scaffold_fn(prompt, batch_size):
     """Dummy sampler that adds a F"""
     if isinstance(prompt, list):
         assert len(prompt) == batch_size, "Prompts provided is not the same as batch size requested"
-        return [prompt[i] + "F" for i in range(batch_size)], [random.randint(0, 40) for _ in range(batch_size)]
+        return [prompt[i] + "F" for i in range(batch_size)]
     else:
-        return [prompt + "F" for _ in range(batch_size)], [random.randint(0, 40) for _ in range(batch_size)]
+        return [prompt + "F" for _ in range(batch_size)]
 
 def sample_scaffold_fn2(prompt, batch_size):
     """Dummy sampler that adds nothing"""
     if isinstance(prompt, list):
         assert len(prompt) == batch_size, "Prompts provided is not the same as batch size requested"
-        return [prompt[i] for i in range(batch_size)], [random.randint(0, 40) for _ in range(batch_size)]
+        return [prompt[i] for i in range(batch_size)]
     else:
-        return [prompt for _ in range(batch_size)], [random.randint(0, 40) for _ in range(batch_size)]
+        return [prompt for _ in range(batch_size)]
 
 def sample_linker_fn(prompt, batch_size):
     """Dummy sampler that adds a PEG monomer"""
     if isinstance(prompt, list):
         assert len(prompt) == batch_size, "Prompts provided is not the same as batch size requested"
-        return [prompt[i] + "CCOCC" for i in range(batch_size)], [random.randint(0, 40) for _ in range(batch_size)]
+        return [prompt[i] + "CCOCC" for i in range(batch_size)]
     else:
-        return [prompt + "CCOCC" for _ in range(batch_size)], [random.randint(0, 40) for _ in range(batch_size)]
+        return [prompt + "CCOCC" for _ in range(batch_size)]
 
 def sample_linker_fn2(prompt, batch_size):
     """Dummy sampler that adds nothing"""
     if isinstance(prompt, list):
         assert len(prompt) == batch_size, "Prompts provided is not the same as batch size requested"
-        return [prompt[i] for i in range(batch_size)], [random.randint(0, 40) for _ in range(batch_size)]
+        return [prompt[i] for i in range(batch_size)]
     else:
-        return [prompt for _ in range(batch_size)], [random.randint(0, 40) for _ in range(batch_size)]
+        return [prompt for _ in range(batch_size)]
 
 # --------------------- Scaffold decoration ---------------------
 scaffold_params = [
@@ -84,7 +84,7 @@ def test_decoration_canonical(scaffold, expected):
         shuffle=False,
         return_all=False
         )
-    denovo, nlls = SD.sample()
+    denovo = SD.sample()
     assert len(denovo) == 10
     assert all([utils.smiles_eq(smiles, expected) for smiles in denovo])
 
@@ -99,7 +99,7 @@ def test_decoration_shuffle(scaffold, expected):
         shuffle=True,
         return_all=False
         )
-    denovo, nlls = SD.sample()
+    denovo = SD.sample()
     assert len(denovo) == 10
     assert all([utils.smiles_eq(smiles, expected) for smiles in denovo])
 
@@ -114,7 +114,7 @@ def test_decoration_batch_canonical(scaffold, expected):
         shuffle=False,
         return_all=False
         )
-    denovo, nlls = SD.sample()
+    denovo = SD.sample()
     assert len(denovo) == 10
     assert all([utils.smiles_eq(smiles, expected) for smiles in denovo])
 
@@ -129,7 +129,7 @@ def test_decoration_batch_shuffle(scaffold, expected):
         shuffle=True,
         return_all=False
         )
-    denovo, nlls = SD.sample()
+    denovo = SD.sample()
     assert len(denovo) == 10
     assert all([utils.smiles_eq(smiles, expected) for smiles in denovo])
 
@@ -152,7 +152,7 @@ def test_linking_canonical(frag1, frag2, expected):
         detect_existing=False,
         return_all=False
         )
-    denovo, nlls = SD.sample()
+    denovo = SD.sample()
     assert len(denovo) == 10
     assert all([utils.smiles_eq(smiles, expected) for smiles in denovo])
 
@@ -169,7 +169,7 @@ def test_linking_shuffle(frag1, frag2, expected):
         detect_existing=False,
         return_all=False
         )
-    denovo, nlls = SD.sample()
+    denovo = SD.sample()
     assert len(denovo) == 10
     assert all([utils.smiles_eq(smiles, expected) for smiles in denovo])
 
@@ -186,7 +186,7 @@ def test_linking_batch_canonical(frag1, frag2, expected):
         detect_existing=False,
         return_all=False
         )
-    denovo, nlls = SD.sample()
+    denovo = SD.sample()
     assert len(denovo) == 10
     assert all([utils.smiles_eq(smiles, expected) for smiles in denovo])
 
@@ -203,7 +203,7 @@ def test_linking_batch_shuffle(frag1, frag2, expected):
         detect_existing=False,
         return_all=False
         )
-    denovo, nlls = SD.sample()
+    denovo = SD.sample()
     assert len(denovo) == 10
     assert all([utils.smiles_eq(smiles, expected) for smiles in denovo])
 
@@ -220,7 +220,7 @@ def test_linking_scan(frag1, frag2, expected):
         detect_existing=False,
         return_all=False
         )
-    denovo, nlls = SD.sample()
+    denovo = SD.sample()
     assert len(denovo) == 10
     # Extract linker, and check it's what we expect
     for smiles in denovo:
@@ -241,7 +241,7 @@ def test_linking_batch_scan(frag1, frag2, expected):
         detect_existing=False,
         return_all=False
         )
-    denovo, nlls = SD.sample()
+    denovo = SD.sample()
     assert len(denovo) == 10
     # Extract linker, and check it's what we expect
     for smiles in denovo:
@@ -267,7 +267,7 @@ def test_linking_scan(frag1, frag2, frag3):
         detect_existing=False,
         return_all=False
         )
-    denovo, nlls = SD.sample()
+    denovo = SD.sample()
     assert len(denovo) == 10
     # Extract linker, and check it's what we expect
     for smiles in denovo:
@@ -288,7 +288,7 @@ def test_linking_batch_scan(frag1, frag2, frag3):
         detect_existing=False,
         return_all=False
         )
-    denovo, nlls = SD.sample()
+    denovo = SD.sample()
     assert len(denovo) == 10
     # Extract linker, and check it's what we expect
     for smiles in denovo:
