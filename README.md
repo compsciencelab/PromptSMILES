@@ -31,7 +31,7 @@ SD = ScaffoldDecorator(
     shuffle=True, # Randomly select attachment points within a batch or not
     return_all=False,
     )
-smiles, nlls = SD.sample(batch_size=3, return_all=True) # Parameters can be overriden here if desired
+smiles = SD.sample(batch_size=3, return_all=True) # Parameters can be overriden here if desired
 ```
 ![alt text](https://github.com/MorganCThomas/PromptSMILES/blob/main/images/scaff_dec_example.png)
 
@@ -48,7 +48,7 @@ FL = FragmentLinker(
     scan=False, # Optional when combining 2 fragments, otherwise is set to true
     return_all=False,
 )
-smiles, nlls = FL.sample(batch_size=3)
+smiles = FL.sample(batch_size=3)
 ```
 ![alt text](https://github.com/MorganCThomas/PromptSMILES/blob/main/images/frag_link_example.png)
 ## Required chemical language model functions
