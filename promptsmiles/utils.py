@@ -535,7 +535,7 @@ def correct_fragment_ring_numbers(smi1: str, smi2: str) -> str:
         # Check for number
         if SINGLE_RING.fullmatch(c) or DOUBLE_RING.fullmatch(c):
             # Count max ring index
-            ring_count = max(ring_count, int(c))
+            ring_count = max(ring_count, int(c.strip("%")))
     
     # Reindex smi2
     ring_map = {}
