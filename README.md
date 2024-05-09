@@ -1,3 +1,8 @@
+
+
+[![DOI](https://zenodo.org/badge/757912118.svg)](https://zenodo.org/doi/10.5281/zenodo.11161563)
+
+
 # PromptSMILES: Prompting for scaffold decoration and fragment linking in chemical language models
 
 This library contains code to manipulate SMILES strings to facilitate iterative prompting to be coupled with a trained chemical language model (CLM) that uses SMILES notation.
