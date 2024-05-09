@@ -44,7 +44,7 @@ FL = FragmentLinker(
     evaluate_fn=CLM.evaluater,
     batch_prompts=False,
     optimize_prompts=True,
-    shuffle=True, 
+    shuffle=True,
     scan=False, # Optional when combining 2 fragments, otherwise is set to true
     return_all=False,
 )
