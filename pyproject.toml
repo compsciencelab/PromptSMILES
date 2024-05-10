@@ -16,13 +16,28 @@ authors = [
   { name="Morgan Thomas", email="morganthomas263@gmail.com" },
 ]
 description = "A conveniant package to manipulate SMILES strings for iterative prompting with chemical language models."
+keywords = ["SMILES", "Chemical language models", "De novo", "Constrained de novo", "chemistry", "drug design"]
 readme = "README.md"
 license = {file = "LICENSE"}
 requires-python = ">=3.7"
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
+  # Development status
+  "Development Status :: 4 - Beta", 
+
+  # Python
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.7",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+
+  # Licensing
+  "License :: OSI Approved :: MIT License",
+
+  # Operating system
+  "Operating System :: OS Independent",
 ]
 dependencies = [
   "rdkit>=2022" # Let's just take a relatively recent cut-off for RDKit
