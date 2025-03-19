@@ -105,7 +105,7 @@ class DeNovo:
 class ScaffoldDecorator(BaseSampler):
     def __init__(
         self,
-        scaffold: str,
+        scaffold: str | list,
         batch_size: int,
         sample_fn: Callable,
         evaluate_fn: Callable,
@@ -123,8 +123,8 @@ class ScaffoldDecorator(BaseSampler):
 
         Parameters
         ----------
-        scaffold : str
-            The scaffold SMILES to decorate.
+        scaffold : str | list
+            The scaffold SMILES or list of scaffold SMILES to decorate.
         batch_size : int
             The number of samples to generate. Passed to sample_fn.
         sample_fn : Callable
@@ -161,7 +161,6 @@ class ScaffoldDecorator(BaseSampler):
         self.sample_fn_kwargs = sample_fn_kwargs
         self.evaluate_fn = evaluate_fn
         self.return_all = return_all
-        self.scaffold = scaffold
         self.force_first = force_first
         self.variant = namedtuple(
             "variant", ["orig_smiles", "opt_smiles", "strip_smiles", "at_pts", "nll"]
@@ -172,43 +171,53 @@ class ScaffoldDecorator(BaseSampler):
             utils.disable_rdkit_logging()
 
         # Prepare scaffold SMILES
-        self.at_pts = utils.get_attachment_points(self.scaffold)
-        self.n_pts = len(self.at_pts)
-        self.variants = []
-        # Optionally force initial configuration as the first prompt
-        if self.force_first:
-            opt_smi = self.scaffold
-            opt_nll = self.evaluate_fn([opt_smi])[0]
-            strip_smi, rem_pts = utils.strip_attachment_points(opt_smi)
-            rem_pts.pop(-1)
-            self.at_pts.pop(-1)  # remove last one
-            self.variants.append(
-                self.variant(
-                    orig_smiles=self.scaffold,
-                    opt_smiles=opt_smi,
-                    strip_smiles=strip_smi,
-                    at_pts=rem_pts,
-                    nll=opt_nll,
+        self.scaffolds = []
+        self.scaff_idx = 0
+        assert isinstance(scaffold, (str, list)), "Scaffold must be a SMILES string or list of SMILES strings."
+        scaffold = [scaffold] if isinstance(scaffold, str) else scaffold
+        for scaff in scaffold:
+            # Check if we need to make it a superstructure
+            if "*" not in scaff:
+                scaff = utils.superstructure_smiles(scaff)
+            # Get attachment points and process variants
+            at_pts = utils.get_attachment_points(scaff)
+            n_pts = len(at_pts)
+            variants = []
+            # Optionally force initial configuration as the first prompt
+            if self.force_first:
+                opt_smi = scaff
+                opt_nll = self.evaluate_fn([opt_smi])[0]
+                strip_smi, rem_pts = utils.strip_attachment_points(opt_smi)
+                rem_pts.pop(-1)
+                at_pts.pop(-1)  # remove last one
+                variants.append(
+                    self.variant(
+                        orig_smiles=scaff,
+                        opt_smiles=opt_smi,
+                        strip_smiles=strip_smi,
+                        at_pts=rem_pts,
+                        nll=opt_nll,
+                    )
                 )
-            )
-        # Optimize all other attachment points
-        variants = []
-        for aidx in self.at_pts:
-            opt_smi, opt_nll = self.rearrange_prompt(self.scaffold, aidx, reverse=True)
-            strip_smi, rem_pts = utils.strip_attachment_points(opt_smi)
-            rem_pts.pop(-1)
-            variants.append(
-                self.variant(
-                    orig_smiles=self.scaffold,
-                    opt_smiles=opt_smi,
-                    strip_smiles=strip_smi,
-                    at_pts=rem_pts,
-                    nll=opt_nll,
+            # Optimize all other attachment points
+            opt_variants = []
+            for aidx in at_pts:
+                opt_smi, opt_nll = self.rearrange_prompt(scaff, aidx, reverse=True)
+                strip_smi, rem_pts = utils.strip_attachment_points(opt_smi)
+                rem_pts.pop(-1)
+                opt_variants.append(
+                    self.variant(
+                        orig_smiles=scaff,
+                        opt_smiles=opt_smi,
+                        strip_smiles=strip_smi,
+                        at_pts=rem_pts,
+                        nll=opt_nll,
+                    )
                 )
-            )
-        if self.optimize_prompts:
-            variants.sort(key=lambda x: x.nll)
-        self.variants.extend(variants)
+            if self.optimize_prompts:
+                opt_variants.sort(key=lambda x: x.nll)
+            variants.extend(opt_variants)
+            self.scaffolds.append({'scaff': scaff, 'n_pts': n_pts, 'variants': variants})
 
     def _single_sample(self, shuffle: bool = None, return_all: bool = None):
         # Set parameters
@@ -219,15 +228,20 @@ class ScaffoldDecorator(BaseSampler):
 
         # Select initial attachment point
         if shuffle:
-            i = random.randint(0, self.n_pts - 1)
+            # Random scaffold and variant
+            scaff_idx = random.randint(0, len(self.scaffolds) - 1)
+            var_idx = random.randint(0, self.scaffolds[scaff_idx]['n_pts'] - 1)
         else:
-            i = 0
+            # Next scaffold and variant
+            self.scaff_idx += 1
+            scaff_idx = self.scaff_idx % len(self.scaffolds)
+            var_idx = 0
         if self.force_first:
-            i = 0
-        variant = deepcopy(self.variants[i])
+            var_idx = 0
+        variant = deepcopy(self.scaffolds[scaff_idx]['variants'][var_idx])
 
         # Sample
-        n_rem = self.n_pts
+        n_rem = self.scaffolds[scaff_idx]['n_pts']
         batch_smiles = []
         while n_rem:
             prompt = variant.strip_smiles
@@ -316,38 +330,46 @@ class ScaffoldDecorator(BaseSampler):
         batch_variants = []
         for _ in range(batch_size):
             if shuffle:
-                i = random.randint(0, self.n_pts - 1)
+                scaff_idx = random.randint(0, len(self.scaffolds) - 1)
+                var_idx = random.randint(0, self.scaffolds[scaff_idx]['n_pts'] - 1)
             else:
-                i = 0
+                self.scaff_idx += 1
+                scaff_idx = self.scaff_idx % len(self.scaffolds)
+                var_idx = 0
             if self.force_first:
-                i = 0
-            batch_variants.append(deepcopy(self.variants[i]))
+                var_idx = 0
+            batch_variants.append(deepcopy(self.scaffolds[scaff_idx]['variants'][var_idx]))
 
         # Sample
-        n_rem = self.n_pts
+        not_finished = True
         batch_smiles = []
-        while n_rem:
+        while not_finished:
             # Sample based on initial prompt
             prompts = [v.strip_smiles for v in batch_variants]
             smiles = self.sample_fn(
                 prompt=prompts, batch_size=batch_size, **self.sample_fn_kwargs
             )
             batch_smiles.append(smiles)
-            n_rem -= 1
+            not_finished = any([len(variant.at_pts) for variant in batch_variants])
 
-            if n_rem:
+            if not_finished:
                 new_variants = []
                 for smi, variant in zip(smiles, batch_variants):
                     if not smi.startswith(variant.strip_smiles):
                         logger.error(
                             f"Sampled SMILES {smi} does not start with prompt {variant.strip_smiles}, why not?"
                         )
-
+                    # If already completed, re-do previous step until all completed
+                    if not variant.at_pts:
+                        new_variants.append(
+                            variant
+                        )
+                        continue
                     # Insert remaining attachment points
                     smi_w_at = utils.insert_attachment_points(smi, variant.at_pts)
                     # Select another
                     if shuffle:
-                        i = random.randint(0, n_rem - 1)
+                        i = random.randint(0, len(variant.at_pts) - 1)
                     else:
                         i = 0
                     sel_pt = variant.at_pts[i]
@@ -421,6 +443,21 @@ class ScaffoldDecorator(BaseSampler):
     ):
         """
         Sample de novo molecules, see init docstring for more details.
+        
+        Parameters
+        ----------
+        batch_size : int, optional
+            The number of samples to generate. Passed to sample_fn, by default None
+        batch_prompts : bool, optional
+            Whether the sample_fn can accept a list of prompts equal to batch_size, by default None
+        return_all : bool, optional
+            Whether to return all intermediate samples, by default None
+        shuffle : bool, optional
+            Whether to shuffle the attachment points, by default None
+        
+        Returns
+        -------
+        smiles : list
         """
         # Set parameters
         if not batch_size:
