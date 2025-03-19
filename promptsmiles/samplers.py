@@ -4,6 +4,7 @@
 
 import logging
 import random
+import typing
 
 logger = logging.getLogger("promptsmiles")
 from collections import namedtuple
@@ -105,7 +106,7 @@ class DeNovo:
 class ScaffoldDecorator(BaseSampler):
     def __init__(
         self,
-        scaffold: str | list,
+        scaffold: typing.Union[str, list],
         batch_size: int,
         sample_fn: Callable,
         evaluate_fn: Callable,

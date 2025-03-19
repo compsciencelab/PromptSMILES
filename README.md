@@ -5,6 +5,11 @@
 
 # PromptSMILES: Prompting for scaffold decoration and fragment linking in chemical language models
 
+[Paper](https://jcheminf.biomedcentral.com/articles/10.1186/s13321-024-00861-w) |
+[Tutorial](https://github.com/Acellera/acegen-open/blob/main/tutorials/using_promptsmiles.md) |
+[ACEGEN](https://pubs.acs.org/doi/10.1021/acs.jcim.4c00895)
+
+
 This library contains code to manipulate SMILES strings to facilitate iterative prompting to be coupled with a trained chemical language model (CLM) that uses SMILES notation.
 
 # Installation
@@ -27,7 +32,25 @@ PromptSMILES is designed as a wrapper to CLM sampling that can accept a prompt (
 from promptsmiles import ScaffoldDecorator, FragmentLinker
 
 SD = ScaffoldDecorator(
-    scaffold="N1(*)CCN(CC1)CCCCN(*)",
+    scaffold="N1(*)CCN(CC1)CCCCN(*)", # Or list of SMILES
+    batch_size=64,
+    sample_fn=CLM.sampler,
+    evaluate_fn=CLM.evaluater,
+    batch_prompts=False, # CLM.sampler accepts a list of prompts or not
+    optimize_prompts=True,
+    shuffle=True, # Randomly select attachment points within a batch or not
+    return_all=False,
+    )
+smiles = SD.sample(batch_size=3, return_all=True) # Parameters can be overriden here if desired
+```
+![alt text](https://github.com/MorganCThomas/PromptSMILES/blob/main/images/scaff_dec_example.png)
+
+## Superstructure generation
+```python
+from promptsmiles import ScaffoldDecorator, FragmentLinker
+
+SD = ScaffoldDecorator(
+    scaffold="N1CCN(CC1)CCCCN", # Or list of SMILES
     batch_size=64,
     sample_fn=CLM.sampler,
     evaluate_fn=CLM.evaluater,
