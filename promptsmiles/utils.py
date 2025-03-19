@@ -6,6 +6,7 @@ import copy
 import logging
 import random
 import re
+from collections import defaultdict
 
 logger = logging.getLogger("promptsmiles")
 
@@ -446,8 +447,8 @@ def _seek_source_atom(smiles_or_tokens, idx):
             br_open += 1
         if BR_OPEN.fullmatch(t):
             br_open += -1
-        # If there's no branches open and we're not opening another
-        if (br_open == 0) and not BR.fullmatch(t):
+        # If there's no branches open and we're not opening another, or it's another attch point
+        if (br_open == 0) and not BR.fullmatch(t) and not (BR_ATTCH.fullmatch(t) or ATTCH.fullmatch(t)):
             found = True
     return idx
 
@@ -459,20 +460,20 @@ def get_attachment_points(smi: str, return_map: bool = False) -> list:
     atom_counter = 0
     all_counter = 0
     token2atom_map = {}
-    attch2dummy_map = {}
+    attch2dummy_map = defaultdict(list)
     for ti, t in enumerate(tokens):
         if ATTCH.fullmatch(t) or BR_ATTCH.fullmatch(t):
             # If it's the first atom
             if ti == 0:
                 # Seek next atom...
-                attch2dummy_map[atom_counter] = all_counter
+                attch2dummy_map[atom_counter].append(all_counter)
             # NOTE correcting for preceeding branches i.e., see previous atom...
             elif (ti > 0) and BR_CLOSE.fullmatch(tokens[ti - 1]):
                 source_ti = _seek_source_atom(tokens, ti)
-                attch2dummy_map[token2atom_map[source_ti]] = all_counter
+                attch2dummy_map[token2atom_map[source_ti]].append(all_counter)
             # Otherwise it's the previous atom
             else:
-                attch2dummy_map[atom_counter - 1] = all_counter
+                attch2dummy_map[atom_counter - 1].append(all_counter)
             all_counter += 1
 
         if any(
@@ -488,7 +489,7 @@ def get_attachment_points(smi: str, return_map: bool = False) -> list:
     if return_map:
         return attch2dummy_map
     else:
-        return list(attch2dummy_map.keys())
+        return [k for k in attch2dummy_map for _ in attch2dummy_map[k]]
 
 
 def insert_attachment_points(smi: str, at_pts: list):
@@ -506,7 +507,8 @@ def insert_attachment_points(smi: str, at_pts: list):
             ]
         ):
             if atom_counter in at_pts:
-                new_tokens.append("(*)")
+                for _ in range(sum([at_pt == atom_counter for at_pt in at_pts])):
+                    new_tokens.append("(*)")
             atom_counter += 1
     smi = "".join(new_tokens)
     return smi
@@ -515,7 +517,7 @@ def insert_attachment_points(smi: str, at_pts: list):
 def correct_attachment_point(smi: str, at_pt: int) -> int:
     """Switch attachment point index to wildcard index in atom"""
     attch2dummy_map = get_attachment_points(smi, return_map=True)
-    return attch2dummy_map[at_pt]
+    return attch2dummy_map[at_pt][0]
 
 
 def strip_attachment_points(smi: str):

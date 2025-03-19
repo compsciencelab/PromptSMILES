@@ -50,18 +50,18 @@ smiles = SD.sample(batch_size=3, return_all=True) # Parameters can be overriden 
 from promptsmiles import ScaffoldDecorator, FragmentLinker
 
 SD = ScaffoldDecorator(
-    scaffold="N1CCN(CC1)CCCCN", # Or list of SMILES
+    scaffold="CCCC1=NN(C2=C1N=C(NC2=O)C3=C(C=CC(=C3)S(=O)(=O)N4CCN(CC4)C)OCC)C", # Or list of SMILES
     batch_size=64,
     sample_fn=CLM.sampler,
     evaluate_fn=CLM.evaluater,
     batch_prompts=False, # CLM.sampler accepts a list of prompts or not
-    optimize_prompts=True,
-    shuffle=True, # Randomly select attachment points within a batch or not
+    optimize_prompts=False,
+    shuffle=False, # Randomly select attachment points within a batch or not
     return_all=False,
     )
 smiles = SD.sample(batch_size=3, return_all=True) # Parameters can be overriden here if desired
 ```
-![alt text](https://github.com/MorganCThomas/PromptSMILES/blob/main/images/scaff_dec_example.png)
+![alt text](https://github.com/MorganCThomas/PromptSMILES/blob/main/images/scaff_super_example.png)
 
 ## Fragment linking / scaffold hopping
 ```python
