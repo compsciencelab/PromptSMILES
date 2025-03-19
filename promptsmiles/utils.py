@@ -682,6 +682,38 @@ def detect_existing_fragment(smiles, frag_smiles):
     return frag_indexes
 
 
+# ----- Superstructure utility -----
+def superstructure_smiles(smiles: str) -> str:
+    """
+    Adds a dummy atom (*) to every heavy atom in the molecule with available valence.
+    
+    :param smiles: Input SMILES string.
+    :return: Modified SMILES string with dummy atoms added.
+    """
+    mol = Chem.MolFromSmiles(smiles)
+    if not mol:
+        raise ValueError(f"Invalid SMILES string: {smiles}")
+    
+    mol = Chem.RWMol(mol)
+    dummy = Chem.Atom(0)
+    at_pts = []
+    for ai in range(mol.GetNumAtoms()):
+        atom = mol.GetAtomWithIdx(ai)
+        if atom.GetAtomicNum() > 1:
+            for _ in range(atom.GetNumImplicitHs()):
+                at_pts.append(ai)
+
+    mol.BeginBatchEdit()
+    for ai in at_pts: 
+        dummy_idx = mol.AddAtom(dummy)
+        mol.AddBond(ai, dummy_idx, Chem.BondType.SINGLE)
+    
+    Chem.SanitizeMol(mol)
+    super_smiles = bracket_attachments(Chem.MolToSmiles(mol))
+    
+    return super_smiles
+
+
 # ----- Useful functions for testing -----
 def smiles_eq(smi1, smi2):
     mol1 = Chem.MolFromSmiles(smi1)
