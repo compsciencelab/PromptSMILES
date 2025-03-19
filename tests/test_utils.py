@@ -54,6 +54,11 @@ def test_ring_numbers(smiles):
     csmiles = utils._check_ring_numbers(smiles)
     eq, err = utils.smiles_eq(smiles, csmiles)
     assert eq, "SMILES with corrected ring numbers is not equivalent"
+    
+@pytest.mark.parametrize("smiles", TEST_SMILES)
+def test_superstructure(smiles):
+    """Check to see that we can convert smiles to superstructures without throwing an error."""
+    assert utils.superstructure_smiles(smiles), "Superstructure conversion failed"
 
 
 # --------------------- Scaffold tests ----------------------
