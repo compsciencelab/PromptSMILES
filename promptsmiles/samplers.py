@@ -203,11 +203,8 @@ class ScaffoldDecorator(BaseSampler):
             # Optimize all other attachment points
             opt_variants = []
             for aidx in at_pts:
-                try:
-                    opt_smi, opt_nll = self.rearrange_prompt(scaff, aidx, reverse=True)
-                    strip_smi, rem_pts = utils.strip_attachment_points(opt_smi)
-                except:
-                    import pdb; pdb.set_trace()
+                opt_smi, opt_nll = self.rearrange_prompt(scaff, aidx, reverse=True)
+                strip_smi, rem_pts = utils.strip_attachment_points(opt_smi)
                 rem_pts.pop(-1)
                 opt_variants.append(
                     self.variant(
