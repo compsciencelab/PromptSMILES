@@ -11,14 +11,14 @@ exclude = ["images*", "tests*"]
 
 [project]
 name = "promptsmiles"
-version = "1.6.1"
+version = "1.7"
 authors = [
   { name="Morgan Thomas", email="morganthomas263@gmail.com" },
 ]
 description = "A conveniant package to manipulate SMILES strings for iterative prompting with chemical language models."
 keywords = ["SMILES", "Chemical language models", "De novo", "Constrained de novo", "chemistry", "drug design"]
 readme = "README.md"
-license = {file = "LICENSE"}
+license = "APACHE-2.0"
 requires-python = ">=3.7"
 classifiers = [
   # Development status
@@ -32,9 +32,6 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
-
-  # Licensing
-  "License :: OSI Approved :: MIT License",
 
   # Operating system
   "Operating System :: OS Independent",

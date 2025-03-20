@@ -35,7 +35,8 @@ RING_ATOM_2 = re.compile(
 SINGLE_RING = re.compile(r"([0-9]{1})")
 DOUBLE_RING = re.compile(r"(%[0-9]{2})")
 BR_ATTCH = re.compile(r"(\(\*\))")
-ATTCH = re.compile(r"(\*)")
+ATTCH = re.compile(r"(\*(?![^[]*\]))") # Not * in square brackets
+SUB_ATTCH = re.compile(r"(\[99\*\])")
 BR_OPEN = re.compile(r"(\()")
 BR_CLOSE = re.compile(r"(\))")
 BR = re.compile(r"(\(|\))")
@@ -158,6 +159,7 @@ def root_smiles(smi, rootAtom=None, reverse=False):
     if smi.startswith("(*)"):
         smi = re.sub(r"\(\*\)", "*", smi, count=1)
 
+    smi = xsmiles2smiles(smi)
     mol = Chem.MolFromSmiles(smi)
     new_smi = None
     if mol:
@@ -165,12 +167,14 @@ def root_smiles(smi, rootAtom=None, reverse=False):
         if reverse:
             # NOTE sometimes RDKit assigns the same ring index to different rings, causing an error upon reversing, so let's re-index if necessary
             try:
+                
                 new_smi = _check_ring_numbers(new_smi)
             except Exception as e:
                 logger.error(e)
                 pass
             new_smi = reverse_smiles(new_smi)
         # Convert back to (*)
+        new_smi = smiles2xsmiles(new_smi)
         new_smi = bracket_attachments(new_smi)
     return new_smi
 
@@ -194,7 +198,8 @@ def randomize_smiles(
     # Convert leading wildcard out of parenthesis if presented that way
     if smi.startswith("(*)"):
         smi = re.sub(r"\(\*\)", "*", smi, count=1)
-
+    
+    smi = xsmiles2smiles(smi)
     mol = Chem.MolFromSmiles(smi)
     if not mol:
         return None
@@ -224,6 +229,7 @@ def randomize_smiles(
                 random_smiles = reverse_smiles(random_smiles)
 
             # Convert back to (*)
+            random_smiles = smiles2xsmiles(random_smiles)
             random_smiles = bracket_attachments(random_smiles)
 
             rand_smiles.append(random_smiles)
@@ -263,6 +269,7 @@ def randomize_smiles(
                 random_smiles = reverse_smiles(random_smiles)
 
             # Convert back to (*)
+            random_smiles = smiles2xsmiles(random_smiles)
             random_smiles = bracket_attachments(random_smiles)
 
             rand_smiles.append(random_smiles)
@@ -341,6 +348,7 @@ def _reverse_ring_numbers(smi: str) -> str:
 
 def _check_ring_numbers(smiles, debug=False, v=False):
     """Check and re-index ring numbers sequentially if needed"""
+    smiles = xsmiles2smiles(smiles)
     mol = Chem.MolFromSmiles(smiles)
     ringinfo = mol.GetRingInfo()
     N_rings = ringinfo.NumRings()
@@ -401,6 +409,7 @@ def _check_ring_numbers(smiles, debug=False, v=False):
     if v:
         print(ring_map)
     new_smiles = "".join(new_tokens)
+    new_smiles = smiles2xsmiles(new_smiles)
     logger.debug(f"Re-indexed SMILES rings from {smiles} -> {new_smiles}")
     return new_smiles
 
@@ -692,6 +701,7 @@ def superstructure_smiles(smiles: str) -> str:
     :param smiles: Input SMILES string.
     :return: Modified SMILES string with dummy atoms added.
     """
+    smiles = xsmiles2smiles(smiles)
     mol = Chem.MolFromSmiles(smiles)
     if not mol:
         raise ValueError(f"Invalid SMILES string: {smiles}")
@@ -711,13 +721,17 @@ def superstructure_smiles(smiles: str) -> str:
         mol.AddBond(ai, dummy_idx, Chem.BondType.SINGLE)
     
     Chem.SanitizeMol(mol)
-    super_smiles = bracket_attachments(Chem.MolToSmiles(mol))
+    super_smiles = Chem.MolToSmiles(mol)
+    super_smiles = smiles2xsmiles(super_smiles)
+    super_smiles = bracket_attachments(super_smiles)
     
     return super_smiles
 
 
 # ----- Useful functions for testing -----
 def smiles_eq(smi1, smi2):
+    smi1 = xsmiles2smiles(smi1)
+    smi2 = xsmiles2smiles(smi2)
     mol1 = Chem.MolFromSmiles(smi1)
     mol2 = Chem.MolFromSmiles(smi2)
     # Parse them
@@ -757,3 +771,10 @@ def mol_eq(mol1, mol2):
     if inchi1 != inchi2:
         return False, "Inequivalent InChi's"
     return True, ""
+
+
+def xsmiles2smiles(smiles):
+    return smiles.replace("X", "[99*]")
+
+def smiles2xsmiles(smiles):
+    return smiles.replace("[99*]", "X")
