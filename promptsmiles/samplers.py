@@ -555,6 +555,10 @@ class FragmentLinker(BaseSampler):
         random.seed(self.seed)
         if not rdkit_logging:
             utils.disable_rdkit_logging()
+            
+        # Check fragments
+        if any(["X" in f for f in fragments]):
+            raise NotImplementedError("FragmentLinker does not support X substitution yet.")
 
         # Correct scan
         if len(fragments) > 2 and not self.scan:
