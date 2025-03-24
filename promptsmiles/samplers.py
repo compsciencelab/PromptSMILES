@@ -154,6 +154,11 @@ class ScaffoldDecorator(BaseSampler):
         smiles : list
             A list of generated SMILES with a scaffold decorated.
         """
+        assert isinstance(scaffold, (str, list)), "Scaffold must be a SMILES string or list of SMILES strings."
+        scaffold = [scaffold] if isinstance(scaffold, str) else scaffold
+        if any("X" in scaff for scaff in scaffold) and optimize_prompts:
+            logger.warning("ScaffoldDecorator does not support X substitution and prompt optimization yet. Setting optimize_prompts=False.")
+            optimize_prompts = False
         super().__init__(sample_fn, evaluate_fn, optimize_prompts)
         self.batch_size = batch_size
         self.batch_prompts = batch_prompts
@@ -174,8 +179,6 @@ class ScaffoldDecorator(BaseSampler):
         # Prepare scaffold SMILES
         self.scaffolds = []
         self.scaff_idx = 0
-        assert isinstance(scaffold, (str, list)), "Scaffold must be a SMILES string or list of SMILES strings."
-        scaffold = [scaffold] if isinstance(scaffold, str) else scaffold
         for scaff in scaffold:
             # Check if we need to make it a superstructure
             if "*" not in scaff:
@@ -216,7 +219,8 @@ class ScaffoldDecorator(BaseSampler):
                     )
                 )
             if self.optimize_prompts:
-                opt_variants.sort(key=lambda x: x.nll)
+                if "X" not in scaff:
+                    opt_variants.sort(key=lambda x: x.nll)
             variants.extend(opt_variants)
             self.scaffolds.append({'scaff': scaff, 'n_pts': n_pts, 'variants': variants})
 
@@ -250,10 +254,6 @@ class ScaffoldDecorator(BaseSampler):
                 prompt=prompt, batch_size=1, **self.sample_fn_kwargs
             )
             smiles = smiles[0]
-            if not smiles.startswith(prompt):
-                logger.error(
-                    f"Sampled SMILES {smiles} does not start with prompt {prompt}, why not?"
-                )
             batch_smiles.append(smiles)
             n_rem -= 1
 
@@ -306,7 +306,7 @@ class ScaffoldDecorator(BaseSampler):
                             orig_smiles=smi_w_at,
                             opt_smiles=smiles,
                             strip_smiles=smiles,
-                            at_pts=deepcopy(variant.at_pts),
+                            at_pts=[],
                             nll=None,
                         )
 
@@ -356,10 +356,6 @@ class ScaffoldDecorator(BaseSampler):
             if not_finished:
                 new_variants = []
                 for smi, variant in zip(smiles, batch_variants):
-                    if not smi.startswith(variant.strip_smiles):
-                        logger.error(
-                            f"Sampled SMILES {smi} does not start with prompt {variant.strip_smiles}, why not?"
-                        )
                     # If already completed, re-do previous step until all completed
                     if not variant.at_pts:
                         new_variants.append(
@@ -424,7 +420,7 @@ class ScaffoldDecorator(BaseSampler):
                                     orig_smiles=smi_w_at,
                                     opt_smiles=smi,
                                     strip_smiles=smi,
-                                    at_pts=deepcopy(variant.at_pts),
+                                    at_pts=[],
                                     nll=None,
                                 )
                             )
