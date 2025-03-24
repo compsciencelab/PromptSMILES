@@ -245,7 +245,8 @@ scaffold_parameters = [
         15,
         31,
     ),
-    ("c1ccXc(*)c1", 4, 5)
+    ("c1ccXc(*)c1", 4, 5),
+    ("c1cXXc(*)c1", 4, 5)
 ]
 
 

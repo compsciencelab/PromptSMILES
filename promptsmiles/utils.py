@@ -725,6 +725,8 @@ def superstructure_smiles(smiles: str) -> str:
     super_smiles = smiles2xsmiles(super_smiles)
     super_smiles = bracket_attachments(super_smiles)
     
+    assert ATTCH.search(super_smiles) or BR_ATTCH.search(super_smiles), f"No attachment points found for superstructure SMILES: {super_smiles}"
+    
     return super_smiles
 
 
@@ -774,7 +776,11 @@ def mol_eq(mol1, mol2):
 
 
 def xsmiles2smiles(smiles):
-    return smiles.replace("X", "[99*]")
+    smiles = smiles.replace("X", "[99*]")
+    # NOTE: Remove explicit aromatic bonds, likely not in many vocabularies
+    aromatic_bond = r"(\:(?![^[]*\]))"
+    smiles = re.sub(aromatic_bond, "", smiles)
+    return smiles
 
 def smiles2xsmiles(smiles):
     return smiles.replace("[99*]", "X")
